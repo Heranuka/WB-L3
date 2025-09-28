@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Древовидные комментарии UI</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: auto; padding: 20px; }
+  .comment { border: 1px solid #ccc; padding: 10px; margin: 8px 0; }
+  .children { margin-left: 20px; }
+  .actions button { margin-right: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Комментарии</h1>
+
+<input id="searchInput" placeholder="Поиск по комментариям" />
+<button onclick="searchComments()">Найти</button>
+<button onclick="resetSearch()">Сбросить</button>
+
+<div id="commentsContainer"></div>
+
+<h2>Добавить комментарий</h2>
+<textarea id="newCommentText" rows="3" style="width:100%"></textarea><br/>
+<button onclick="addComment()">Добавить</button>
+
+<script>
+  // Данные комментариев будут загружаться с сервера, тут пример пустого массива
+  let allComments = [];
+
+  // Загрузить комментарии с backend по query (parent id, поиск и пагинация можно добавить)
+  async function loadComments(parentId = null, search = '') {
+    const url = new URL('/comments', window.location.origin);
+    if(parentId !== null) url.searchParams.set('parent', parentId);
+    if(search) url.searchParams.set('search', search);
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Ошибка загрузки комментариев');
+    const data = await res.json();
+    allComments = data; // Ожидаем массив CommentNode с вложенностью
+    render();
+  }
+
+  // Рендеринг комментариев рекурсивно
+  function renderComments(commentNodes, container) {
+    container.innerHTML = '';
+    commentNodes.forEach(cnode => {
+      const div = document.createElement('div');
+      div.className = 'comment';
+      div.innerHTML = `
+        <div>${cnode.Comment.content}</div>
+        <div class="actions">
+          <button onclick="reply(${cnode.Comment.id})">Ответить</button>
+          <button onclick="deleteComment(${cnode.Comment.id})">Удалить</button>
+        </div>
+      `;
+      container.appendChild(div);
+      if(cnode.Children && cnode.Children.length) {
+        const childrenDiv = document.createElement('div');
+        childrenDiv.className = 'children';
+        div.appendChild(childrenDiv);
+        renderComments(cnode.Children, childrenDiv);
+      }
+    });
+  }
+
+  function render() {
+    const container = document.getElementById('commentsContainer');
+    renderComments(allComments, container);
+  }
+
+  // Добавить новый комментарий или ответ
+  async function addComment(parentID = null) {
+    const textEl = parentID ? document.getElementById('replyText-' + parentID) : document.getElementById('newCommentText');
+    const text = textEl.value.trim();
+    if(!text) {alert('Введите текст комментария'); return;}
+    const payload = {
+      text: text,
+      postID: 1, // Укажите ID поста или элемента
+      parentID: parentID
+    };
+    const res = await fetch('/comments', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) {alert('Ошибка при добавлении'); return;}
+    textEl.value = '';
+    await loadComments(null);
+  }
+
+  // Удалить комментарий
+  async function deleteComment(id) {
+    if(!confirm('Удалить комментарий и все вложенные?')) return;
+    const res = await fetch(`/comments/${id}`, {method:'DELETE'});
+    if(!res.ok) {alert('Ошибка удаления'); return;}
+    await loadComments(null);
+  }
+
+  // Открыть поле для ответа к комментарию
+  function reply(parentID) {
+    let parentDiv = [...document.querySelectorAll('.comment')].find(div => div.querySelector(`.actions button[onclick='reply(${parentID})']`));
+    if(!parentDiv) return;
+    if(parentDiv.querySelector('textarea')) return; // уже открыто
+    const textarea = document.createElement('textarea');
+    textarea.id = 'replyText-' + parentID;
+    textarea.rows = 3;
+    textarea.style.width = '100%';
+    const btn = document.createElement('button');
+    btn.textContent = 'Ответить';
+    btn.onclick = () => addComment(parentID);
+    parentDiv.appendChild(textarea);
+    parentDiv.appendChild(btn);
+  }
+
+  // Поиск комментариев (вызываем загрузку с фильтром)
+  async function searchComments() {
+    const term = document.getElementById('searchInput').value.trim();
+    await loadComments(null, term);
+  }
+  async function resetSearch() {
+    document.getElementById('searchInput').value = '';
+    await loadComments();
+  }
+
+  // При загрузке страницы загрузить комментарии
+  window.onload = () => {
+    loadComments();
+  }
+</script>
+
+</body>
+</html>

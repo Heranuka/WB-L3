@@ -1,0 +1,198 @@
+definitions:
+  domain.CancelResponse:
+    properties:
+      message:
+        type: string
+      note_id:
+        type: string
+    type: object
+  domain.Notification:
+    properties:
+      channel:
+        allOf:
+        - $ref: '#/definitions/domain.NotificationChannel'
+        description: через какой канал
+      created_at:
+        type: string
+      data_sent_at:
+        type: string
+      destination:
+        description: куда отправлять (email, telegram username, телефон)
+        type: string
+      id:
+        description: уникальный ID
+        type: string
+      message:
+        description: текст уведомления
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/domain.NotificationStatus'
+        description: текущий статус
+    type: object
+  domain.NotificationChannel:
+    enum:
+    - email
+    - telegram
+    - sms
+    type: string
+    x-enum-varnames:
+    - ChannelEmail
+    - ChannelTelegram
+    - ChannelSMS
+  domain.NotificationStatus:
+    enum:
+    - created
+    - pending
+    - sent
+    - failed
+    - canceled
+    type: string
+    x-enum-varnames:
+    - StatusCreated
+    - StatusPending
+    - StatusSent
+    - StatusFailed
+    - StatusCanceled
+  domain.StatusResponse:
+    properties:
+      note_id:
+        type: string
+      status:
+        type: string
+    type: object
+  noteAuth.RequestNote:
+    properties:
+      channel:
+        $ref: '#/definitions/domain.NotificationChannel'
+      data_sent_at:
+        type: string
+      destination:
+        type: string
+      message:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /notify/all:
+    get:
+      description: Get a list of all notifications
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of notifications
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/domain.Notification'
+              type: array
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all notifications
+      tags:
+      - notifications
+  /notify/cancel/{id}:
+    delete:
+      description: Cancel notification identified by UUID
+      parameters:
+      - description: Notification UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Cancel confirmation
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/domain.CancelResponse'
+            type: object
+        "400":
+          description: Bad request or not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Cancel (delete) a notification by ID
+      tags:
+      - notifications
+  /notify/create:
+    post:
+      consumes:
+      - application/json
+      description: Create a notification with message, channel, destination, and delivery
+        time
+      parameters:
+      - description: Notification request body
+        in: body
+        name: notification
+        required: true
+        schema:
+          $ref: '#/definitions/noteAuth.RequestNote'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Created notification
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/domain.Notification'
+            type: object
+        "400":
+          description: Bad request, validation errors
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new notification
+      tags:
+      - notifications
+  /notify/status/{id}:
+    get:
+      description: Retrieve status of a notification by its UUID
+      parameters:
+      - description: Notification UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Status response
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/domain.StatusResponse'
+            type: object
+        "400":
+          description: Bad request or not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get notification status by ID
+      tags:
+      - notifications
+swagger: "2.0"

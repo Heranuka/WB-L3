@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Delayed Notifier</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: auto; padding: 20px; }
+  h1, h2 { text-align: center; }
+  form { border: 1px solid #ccc; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+  label { display: block; margin-top: 10px; font-weight: bold; }
+  input, select, textarea { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
+  button { margin-top: 15px; padding: 10px 15px; cursor: pointer; }
+  #notifications { margin-top: 20px; }
+  .notification { border: 1px solid #ccc; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  .status { font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>Delayed Notifier</h1>
+
+<form id="notifyForm">
+  <label for="destination">Destination</label>
+  <input type="text" id="destination" name="destination" placeholder="Email, Telegram username, etc." required/>
+
+  <label for="channel">Channel</label>
+  <select id="channel" name="channel" required>
+    <option value="email">Email</option>
+    <option value="telegram">Telegram</option>
+  </select>
+
+  <label for="message">Message</label>
+  <textarea id="message" name="message" rows="4" placeholder="Notification message" required></textarea>
+
+  <label for="sendAt">Send At</label>
+  <input type="datetime-local" id="sendAt" name="sendAt" required />
+
+  <button type="submit">Create Notification</button>
+</form>
+
+<h2>Scheduled Notifications</h2>
+<div id="notifications">Loading...</div>
+
+<script>
+const form = document.getElementById("notifyForm");
+const notificationsDiv = document.getElementById("notifications");
+
+function initDatetime() {
+  const now = new Date();
+  now.setSeconds(0, 0);
+  document.getElementById("sendAt").value = now.toISOString().slice(0, 16);
+}
+
+initDatetime();
+
+async function loadNotifications() {
+  try {
+    const response = await fetch('/notify/all');
+    if (!response.ok) throw new Error("Failed to load notifications");
+    const data = await response.json();
+    const notes = data.notes || [];
+
+    if (notes.length === 0) {
+      notificationsDiv.textContent = "No scheduled notifications.";
+      return;
+    }
+
+    notificationsDiv.innerHTML = notes.map(note => `
+      <div class="notification" id="note-${note.id}">
+        <div><strong>Destination:</strong> ${note.destination}</div>
+        <div><strong>Channel:</strong> ${note.channel}</div>
+        <div><strong>Message:</strong> ${note.message}</div>
+        <div><strong>Send At:</strong> ${new Date(note.data_sent_at).toLocaleString()}</div>
+        <div><strong>Status:</strong> <span class="status">${note.status}</span></div>
+        <button onclick="cancelNotification('${note.id}')">Cancel</button>
+      </div>
+    `).join('');
+  } catch (error) {
+    notificationsDiv.textContent = "Error loading notifications.";
+    console.error(error);
+  }
+}
+
+async function cancelNotification(id) {
+  if (!confirm("Confirm cancellation?")) return;
+  try {
+    const res = await fetch(`/notify/cancel/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Failed to cancel notification");
+    alert("Notification canceled");
+    loadNotifications();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = {
+    destination: form.destination.value.trim(),
+    channel: form.channel.value,
+    message: form.message.value.trim(),
+    data_sent_at: new Date(form.sendAt.value).toISOString()
+  };
+
+  try {
+    const res = await fetch("/notify/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      alert("Error: " + (errData.error || "Failed to create notification"));
+      return;
+    }
+    alert("Notification created!");
+    form.reset();
+    initDatetime();
+    loadNotifications();
+  } catch (error) {
+    alert("Error: " + error.message);
+  }
+});
+
+loadNotifications();
+</script>
+
+</body>
+</html>
