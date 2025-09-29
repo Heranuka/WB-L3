@@ -60,7 +60,7 @@ require (
 	github.com/rs/zerolog v1.34.0
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
-	github.com/wb-go/wbf v0.0.4
+	github.com/wb-go/wbf v0.0.5
 	golang.org/x/arch v0.18.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
