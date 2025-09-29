@@ -1,0 +1,98 @@
+definitions:
+  linksAuth.CreateShortLinkRequest:
+    properties:
+      short_code:
+        example: customcode
+        type: string
+      url:
+        example: https://example.com
+        type: string
+    required:
+    - url
+    type: object
+info:
+  contact: {}
+paths:
+  /analytics/{shortURL}:
+    get:
+      description: Returns stats grouped by day, month, user-agent
+      parameters:
+      - description: Short URL code
+        in: path
+        name: shortURL
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get analytics for short URL
+      tags:
+      - ShortLink
+  /s/{shortURL}:
+    get:
+      description: Redirects user by short URL code
+      parameters:
+      - description: Short URL code
+        in: path
+        name: shortURL
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Redirect to original URL
+      tags:
+      - ShortLink
+  /shorten:
+    post:
+      consumes:
+      - application/json
+      description: Создает короткую ссылку с необязательным кастомным кодом
+      parameters:
+      - description: Request body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/linksAuth.CreateShortLinkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Создать короткую ссылку
+      tags:
+      - ShortLink
+swagger: "2.0"

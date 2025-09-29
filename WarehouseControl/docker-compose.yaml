@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  App:
+    container_name: App
+    image: service
+    ports:
+      - "8080:8080"
+    depends_on:
+      pg-local:
+        condition: service_healthy
+    restart: always
+    volumes:
+      - ./templates:/app/templates
+    networks:
+      - app-network
+
+  pg-local:
+    container_name: pg-local
+    image: postgres:latest
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-local-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DATABASE}
+    env_file:
+      - .env
+    networks:
+      - app-network
+  migrate:
+    image: migrate/migrate:v4.15.2
+    container_name: migration
+    depends_on:
+      - App
+      - pg-local
+    command: [
+      "-path=/app/migrations", # <---  Путь внутри контейнера
+      "-database=postgres://postgres:1@pg-local:5432/postgres?sslmode=disable",
+      "up"
+    ]
+    volumes:
+      - ./internal/migrations:/app/migrations  # <---  Изменен локальный путь
+    networks:
+      - app-network
+networks:
+  app-network:
+    driver: bridge
+
+volumes:  # Volume definitions
+  pg-local-data:
+  redis-local-data:

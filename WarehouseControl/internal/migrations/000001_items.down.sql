@@ -1,0 +1,7 @@
+-- rollback
+
+DROP TABLE IF EXISTS item_history;
+DROP TABLE IF EXISTS items;
+DROP TABLE IF EXISTS users;
+
+DROP TABLE IF EXISTS tokens;

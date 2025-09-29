@@ -1,0 +1,3 @@
+-- Active: 1752029824357@@127.0.0.1@5432
+DROP TABLE short_urls;
+DROP TABLE clicks;
