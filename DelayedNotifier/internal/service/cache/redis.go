@@ -4,6 +4,7 @@ import (
 	"context"
 	"delay/internal/config"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/wb-go/wbf/redis"
@@ -26,7 +27,9 @@ func NewRedisService(cfg *config.Config) *RedisService {
 }
 
 func (s *RedisService) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-
+	if err := s.client.SetWithExpiration(ctx, key, value, expiration); err != nil {
+		return fmt.Errorf("failed to set key: %v", err)
+	}
 	return nil
 }
 
