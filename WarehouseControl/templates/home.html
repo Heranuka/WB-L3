@@ -7,156 +7,128 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
 
-  body {
-    font-family: 'Inter', sans-serif;
+  html, body {
     margin: 0; padding: 0;
-    background: #f4f6f8;
+    background-color: #f4f6f8;
+    font-family: 'Inter', sans-serif;
     color: #333;
-    transition: background-color 0.3s ease;
+    min-height: 100vh;
   }
+
   header {
     background: #2c3e50;
     padding: 15px 30px;
     color: #fff;
+    font-weight: 600;
     display: flex;
-    align-items: center;
     gap: 15px;
-    font-weight: 600;
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    align-items: center;
   }
-  label {
-    font-weight: 600;
+
+  header a {
+    color: white;
+    text-decoration: none;
   }
+
   button {
+    cursor: pointer;
+    font-weight: 600;
     border-radius: 6px;
     border: none;
     padding: 7px 15px;
-    font-size: 14px;
-    outline-offset: 2px;
-    cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.2s ease;
     background: #3498db;
     color: white;
+    transition: background-color 0.3s ease, transform 0.2s ease;
   }
+
   button:hover {
     background: #2980b9;
     transform: scale(1.05);
   }
-  button:active {
-    transform: scale(0.95);
-  }
+
   #app {
     max-width: 1100px;
     margin: 30px auto;
-    padding: 20px 20px 50px;
     background: white;
     border-radius: 10px;
+    padding: 20px 30px 50px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-    display: block;
     animation: fadeIn 0.6s ease forwards;
   }
+
   @keyframes fadeIn {
-    from {opacity: 0; transform: translateY(20px);}
+    from {opacity:0; transform: translateY(20px);}
     to {opacity: 1; transform: translateY(0);}
   }
+
   h2 {
-    margin-top: 0;
     font-weight: 700;
-    color: #2c3e50;
     border-bottom: 2px solid #3498db;
     padding-bottom: 5px;
-    margin-bottom: 15px;
-  }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-top: 15px;
-    transition: box-shadow 0.3s ease;
-  }
-  table:hover {
-    box-shadow: 0 2px 12px rgba(52, 152, 219, 0.25);
-  }
-  th, td {
-    padding: 14px 15px;
-    border-bottom: 1px solid #ddd;
-    text-align: left;
-    font-size: 15px;
-    user-select: none;
-  }
-  th {
-    background: #ecf0f1;
-    font-weight: 600;
-  }
-  tbody tr:hover {
-    background: #f1f7fb;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-  }
-  .readonly {
-    color: #7f8c8d;
-  }
-  #add-item-btn {
-    margin-top: 10px;
-    margin-bottom: 15px;
-    transition: background-color 0.3s ease, transform 0.2s ease;
-  }
-  #add-item-btn:hover {
-    background-color: #27ae60;
-    transform: scale(1.05);
-  }
-  #item-form {
-    max-width: 400px;
-    margin: 20px auto 40px;
-    background: #ecf0f1;
-    padding: 25px;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-    display: none;
-    animation: slideDown 0.5s ease forwards;
-  }
-  @keyframes slideDown {
-    from {opacity: 0; transform: translateY(-20px);}
-    to {opacity: 1; transform: translateY(0);}
-  }
-  #item-form h3 {
     margin-top: 0;
-    color: #34495e;
-  }
-  #item-form label {
-    display: block;
-    margin-bottom: 18px;
-    font-weight: 600;
     color: #2c3e50;
   }
-  #item-form input[type="text"], #item-form input[type="number"] {
+
+  table {
     width: 100%;
-    padding: 10px 14px;
-    border-radius: 6px;
-    border: 1px solid #bdc3c7;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+
+  th, td {
+    border-bottom: 1px solid #ddd;
+    padding: 14px 15px;
+    text-align: left;
     font-size: 15px;
-    transition: border-color 0.3s ease;
   }
-  #item-form input[type="text"]:focus, #item-form input[type="number"]:focus {
-    border-color: #2980b9;
-    outline: none;
-    box-shadow: 0 0 6px rgba(41, 128, 185, 0.6);
+
+  th {
+    background: #ecf0f1;
   }
-  #item-form button {
-    margin-right: 12px;
+
+  tbody tr:hover {
+    background: #f1f7fb;
   }
-  .button-danger {
-    background: #e74c3c;
+
+  #history-section {
+    margin-top: 40px;
   }
-  .button-danger:hover {
-    background: #c0392b;
+
+  #history-table {
+    width: 100%;
+    border-collapse: collapse;
   }
-  .flex-center {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
+
+  #history-table th, #history-table td {
+    border: 1px solid #ccc;
+    padding: 10px;
+  }
+
+  #history-modal {
+    display: none;
+    position: fixed;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    max-width: 800px;
+    width: 90%;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    overflow-y: auto;
+    max-height: 80%;
+    z-index: 10000;
+  }
+
+  #history-modal h3 {
+    margin-top: 0;
+  }
+
+  #history-modal-close {
+    float: right;
+    cursor: pointer;
+    font-size: 24px;
   }
 </style>
 </head>
@@ -164,8 +136,8 @@
 
 <header>
   {{if .User}}
-    Привет, {{.User.Nickname}} ({{.User.Role}})
-    | <a href="/logout" style="color:white;">Выйти</a>
+    Привет, {{.User.Nickname}} ({{index .User.Roles 0}})
+    | <a href="/logout">Выйти</a>
   {{else}}
     <a href="/login">Войти</a> | <a href="/register">Зарегистрироваться</a>
   {{end}}
@@ -174,205 +146,301 @@
 <div id="app" role="main" tabindex="-1">
   {{if .User}}
     <h2>Список товаров</h2>
-    {{if or (eq .User.Role "admin") (eq .User.Role "manager")}}
-    <button id="add-item-btn">Добавить товар</button>
+    {{if or (eq (index .User.Roles 0) "admin") (eq (index .User.Roles 0) "manager")}}
+      <button id="add-item-btn">Добавить товар</button>
     {{end}}
-    <input id="search" placeholder="Поиск по названию товара" />
 
     <table id="items-table" aria-label="Таблица списка товаров">
       <thead>
-        <tr><th>ID</th><th>Название</th><th>Количество</th><th>Действия</th></tr>
+        <tr>
+          <th>ID</th>
+          <th>Название</th>
+          <th>Описание</th>
+          <th>Цена</th>
+          <th>Количество</th>
+          <th>Создан</th>
+          <th>Обновлен</th>
+          <th>Действия</th>
+        </tr>
       </thead>
       <tbody></tbody>
     </table>
 
-    <h2>История изменений</h2>
-    <input id="filter-user" placeholder="Фильтр по пользователю" />
-    <input type="date" id="filter-date-from" title="Дата от" />
-    <input type="date" id="filter-date-to" title="Дата до" />
-    <input id="filter-action" placeholder="Фильтр по действию" />
-    <button id="filter-clear">Сбросить фильтры</button>
-
-    <table id="history-table" aria-label="Таблица истории изменений">
-      <thead>
-        <tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Товар ID</th><th>Описание изменений</th><th>Различия</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-
-    <!-- Модальное окно для добавления/редактирования товара -->
-    <div id="item-form" style="display:none;">
+    <!-- Форма добавления/редактирования -->
+    <div id="item-form" style="display:none; margin-top:20px; padding:10px; border:1px solid #ccc; border-radius:8px;">
       <h3 id="form-title">Добавить товар</h3>
       <input type="hidden" id="item-id" />
-      <label>Название:</label><input type="text" id="item-name" required />
-      <label>Количество:</label><input type="number" id="item-qty" required />
-      <button id="save-item-btn">Сохранить</button>
-      <button id="cancel-item-btn">Отмена</button>
+      <div>
+        <label>Название:</label>
+        <input type="text" id="item-name" required />
+      </div>
+      <div>
+        <label>Описание:</label>
+        <input type="text" id="item-description" required />
+      </div>
+      <div>
+        <label>Цена:</label>
+        <input type="number" id="item-price" step="0.01" required />
+      </div>
+      <div>
+        <label>Количество:</label>
+        <input type="number" id="item-stock" required />
+      </div>
+      <div style="margin-top:10px;">
+        <button id="save-item-btn">Сохранить</button>
+        <button id="cancel-item-btn">Отмена</button>
+      </div>
     </div>
 
-    <!-- Модальное окно для различий -->
-    <div id="diff-modal" style="display:none;">
-      <h3>Различия версий</h3>
-      <pre id="diff-content"></pre>
-      <button onclick="closeDiff()">Закрыть</button>
+    <!-- Блок с историей — перенесён вниз сайта -->
+    <div id="history-section">
+      <h2>История изменений товара</h2>
+      <!-- Фильтр истории (скрыт) -->
+      <div id="history-filters" style="display:none;">
+        <input type="text" id="filter-user" placeholder="Пользователь" />
+        <input type="date" id="filter-date-start" />
+        <input type="date" id="filter-date-end" />
+        <button id="filter-btn">Фильтр</button>
+        <button id="clear-filter-btn">Сбросить</button>
+        <button id="export-history">Экспорт CSV</button>
+      </div>
+      <table id="history-table" aria-label="История изменений">
+        <thead>
+          <tr>
+            <th>Версия</th>
+            <th>Пользователь</th>
+            <th>Дата</th>
+            <th>Описание изменения</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
   {{else}}
     <p>Пожалуйста, <a href="/login">войдите</a> для просмотра.</p>
   {{end}}
 </div>
 
+<!-- Модальное окно для истории -->
+<div id="history-modal">
+  <span id="history-modal-close">&times;</span>
+  <h3>История изменений товара</h3>
+  <table id="history-modal-table" aria-label="История изменений" style="width:100%; border-collapse: collapse;">
+    <thead>
+      <tr>
+        <th>Версия</th>
+        <th>Пользователь</th>
+        <th>Дата</th>
+        <th>Описание изменения</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
 <script>
-  const userRole = '{{if .User}}{{.User.Role}}{{else}}viewer{{end}}';
-
   let items = [];
-  let history = [];
+  let currentHistory = [];
+  let currentHistoryItemId = null;
+  let currentHistoryFilters = {user: '', dateStart: '', dateEnd: ''};
 
-  const itemsTableBody = document.querySelector('#items-table tbody');
-  const historyTableBody = document.querySelector('#history-table tbody');
-  const addItemBtn = document.getElementById('add-item-btn');
-  const itemForm = document.getElementById('item-form');
-  const diffModal = document.getElementById('diff-modal');
-  const diffContent = document.getElementById('diff-content');
+  async function fetchWithAuth(url, options = {}) {
+    const token = localStorage.getItem('jwt_token');
+    if (!options.headers) options.headers = {};
+    if (token) {
+      options.headers['Authorization'] = 'Bearer ' + token;
+    }
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+      alert('Сессия истекла. Пожалуйста, войдите снова.');
+      window.location.href = '/login';
+      return null;
+    }
+    return response;
+  }
 
   async function loadItems() {
     try {
-      const res = await fetch('/items/getall');
-      if (!res.ok) throw new Error('Ошибка загрузки товаров');
-      items = await res.json();
-      renderItems(items);
+      const response = await fetchWithAuth('/items/getall');
+      if (!response || !response.ok) throw new Error('Ошибка загрузки товаров');
+      items = await response.json();
+      renderItems();
     } catch (err) {
       alert(err.message);
     }
   }
 
-  async function loadHistory() {
-    try {
-      const res = await fetch('/history/get');
-      if (!res.ok) throw new Error('Ошибка загрузки истории');
-      history = await res.json();
-      renderHistory(history);
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
-  function renderItems(list) {
-    itemsTableBody.innerHTML = '';
-    list.forEach(item => {
-      let tr = document.createElement('tr');
-      tr.innerHTML = `<td>${item.id}</td><td>${item.name}</td><td>${item.qty}</td><td>`;
-      if(userRole === 'admin' || userRole === 'manager'){
-        tr.innerHTML += `<button onclick="editItem(${item.id})">Редактировать</button>`;
-      }
-      if(userRole === 'admin'){
-        tr.innerHTML += `<button onclick="deleteItem(${item.id})">Удалить</button>`;
-      }
-      tr.innerHTML += '</td>';
-      itemsTableBody.appendChild(tr);
-    });
-  }
-
-  function renderHistory(list) {
-    historyTableBody.innerHTML = '';
-    list.forEach(h => {
-      let tr = document.createElement('tr');
+  function renderItems() {
+    const tbody = document.querySelector('#items-table tbody');
+    tbody.innerHTML = '';
+    items.forEach(item => {
+      const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${h.date}</td>
-        <td>${h.user}</td>
-        <td>${h.action}</td>
-        <td>${h.itemId}</td>
-        <td>${h.desc}</td>
-        <td><button onclick='showDiff(${h.itemId})'>Показать</button></td>
+        <td>${item.id}</td>
+        <td>${item.name}</td>
+        <td>${item.description}</td>
+        <td>${item.price.toFixed(2)}</td>
+        <td>${item.stock}</td>
+        <td>${new Date(item.created_at).toLocaleDateString()}</td>
+        <td>${new Date(item.updated_at).toLocaleDateString()}</td>
+        <td>
+          <button onclick="editItem(${item.id})">Редактировать</button>
+          <button onclick="deleteItem(${item.id})">Удалить</button>
+          <button onclick="showHistory(${item.id})">История</button>
+        </td>
       `;
-      historyTableBody.appendChild(tr);
+      tbody.appendChild(tr);
     });
   }
 
-  function showDiff(itemId){
-    fetch(`/history/diff/${itemId}`)
-      .then(res => res.text())
-      .then(text => {
-        diffContent.textContent = text;
-        diffModal.style.display = 'block';
-      });
-  }
-
-  function closeDiff(){
-    diffModal.style.display = 'none';
-  }
-
-  addItemBtn?.addEventListener('click', () => {
-    itemForm.style.display = 'block';
+  document.getElementById('add-item-btn')?.addEventListener('click', () => {
+    clearForm();
+    document.getElementById('form-title').innerText = 'Добавить товар';
+    document.getElementById('item-form').style.display = 'block';
   });
-
   document.getElementById('cancel-item-btn')?.addEventListener('click', () => {
-    itemForm.style.display = 'none';
+    document.getElementById('item-form').style.display = 'none';
   });
 
-  document.getElementById('save-item-btn')?.addEventListener('click', async () => {
+  document.getElementById('save-item-btn').addEventListener('click', async () => {
     const id = document.getElementById('item-id').value;
     const name = document.getElementById('item-name').value.trim();
-    const qty = +document.getElementById('item-qty').value;
-    if(!name || isNaN(qty)){
+    const description = document.getElementById('item-description').value.trim();
+    const price = parseFloat(document.getElementById('item-price').value);
+    const stock = parseInt(document.getElementById('item-stock').value, 10);
+    if (!name || !description || isNaN(price) || isNaN(stock)) {
       alert('Заполните все поля');
       return;
     }
     const method = id ? 'PUT' : 'POST';
     const url = id ? `/items/update/${id}` : '/items/create';
-    const body = JSON.stringify({name, qty});
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithAuth(url, {
         method,
-        headers:{'Content-Type': 'application/json'},
-        body
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, description, price, stock})
       });
-      if (!response.ok) throw new Error('Ошибка сохранения');
-      itemForm.style.display = 'none';
+      if (!response || !response.ok) throw new Error('Ошибка сохранения');
+      document.getElementById('item-form').style.display = 'none';
       loadItems();
-      loadHistory();
-    } catch(err) {
+    } catch (err) {
       alert(err.message);
     }
   });
 
+  function clearForm() {
+    document.getElementById('item-id').value = '';
+    document.getElementById('item-name').value = '';
+    document.getElementById('item-description').value = '';
+    document.getElementById('item-price').value = '';
+    document.getElementById('item-stock').value = '';
+  }
+
   window.editItem = (id) => {
-    const item = items.find(i => i.id === id);
-    if(!item) return;
+    const item = items.find(i => i.id == id);
+    if (!item) return;
     document.getElementById('item-id').value = item.id;
     document.getElementById('item-name').value = item.name;
-    document.getElementById('item-qty').value = item.qty;
-    itemForm.style.display = 'block';
+    document.getElementById('item-description').value = item.description;
+    document.getElementById('item-price').value = item.price;
+    document.getElementById('item-stock').value = item.stock;
+    document.getElementById('form-title').innerText = 'Редактировать товар';
+    document.getElementById('item-form').style.display = 'block';
   };
 
   window.deleteItem = async (id) => {
-    if(confirm('Удалить товар?')){
+    if (confirm('Удалить товар?')) {
       try {
-        const response = await fetch(`/items/delete/${id}`, {
-          method:'DELETE'
-        });
-        if (!response.ok) throw new Error('Ошибка удаления');
+        const response = await fetchWithAuth(`/items/delete/${id}`, {method:'DELETE'});
+        if (!response || !response.ok) throw new Error('Ошибка удаления');
         loadItems();
-        loadHistory();
-      } catch(err) {
+      } catch (err) {
         alert(err.message);
       }
     }
   };
 
-  document.getElementById('filter-clear')?.addEventListener('click', () => {
+  // Функция для отображения истории выбранного товара
+  window.showHistory = async (itemId) => {
+    currentHistoryItemId = itemId;
+    // сброс фильтров
+    currentHistoryFilters = {user: '', dateStart: '', dateEnd: ''};
     document.getElementById('filter-user').value = '';
-    document.getElementById('filter-date-from').value = '';
-    document.getElementById('filter-date-to').value = '';
-    document.getElementById('filter-action').value = '';
-    loadHistory();
+    document.getElementById('filter-date-start').value = '';
+    document.getElementById('filter-date-end').value = '';
+    await fetchHistory(itemId);
+  };
+
+  async function fetchHistory(itemId) {
+    let url = `/items/history/${itemId}`;
+    const filters = currentHistoryFilters;
+    const params = new URLSearchParams();
+    if (filters.user) params.append('user', filters.user);
+    if (filters.dateStart) params.append('start', filters.dateStart);
+    if (filters.dateEnd) params.append('end', filters.dateEnd);
+    if (params.toString()) url += '?' + params.toString();
+
+    try {
+      const res = await fetchWithAuth(url);
+      if (!res || !res.ok) throw new Error('Ошибка загрузки истории');
+      currentHistory = await res.json();
+      renderHistory();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function renderHistory() {
+    const tbody = document.querySelector('#history-table tbody');
+    tbody.innerHTML = '';
+    if (!currentHistory || currentHistory.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">История отсутствует</td></tr>';
+      return;
+    }
+    currentHistory.forEach(entry => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${entry.version}</td>
+        <td>${entry.changed_by_user}</td>
+        <td>${new Date(entry.changed_at).toLocaleString()}</td>
+        <td>${entry.change_description}</td>
+        <td></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('export-history').addEventListener('click', () => {
+    exportHistoryToCSV();
+  });
+
+  function exportHistoryToCSV() {
+    if (!currentHistory || currentHistory.length === 0) return;
+    const headers = ['Версия', 'Пользователь', 'Дата', 'Описание изменения'];
+    const rows = currentHistory.map(entry => [
+      entry.version,
+      entry.changed_by_user,
+      new Date(entry.changed_at).toLocaleString(),
+      entry.change_description
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
+    const blob = new Blob([csvContent], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'history.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('history-modal-close').addEventListener('click', () => {
+    document.getElementById('history-modal').style.display = 'none';
   });
 
   window.onload = () => {
     loadItems();
-    loadHistory();
   };
 </script>
-
 </body>
 </html>
-  

@@ -5,8 +5,9 @@ package jwt
 import (
 	"context"
 	"net/http"
+	"strings"
 
-	"github.com/gin-gonic/gin"
+	"github.com/wb-go/wbf/ginext"
 )
 
 // ... (Permission и rolePermissions) ...
@@ -19,77 +20,59 @@ type ErrorBody struct {
 	Message string `json:"message"`
 }
 
-func ProcessError(c *gin.Context, msg string, code int) {
+func ProcessError(c *ginext.Context, msg string, code int) {
 	body := ErrorBody{
 		Message: msg,
 	}
 	c.AbortWithStatusJSON(code, body)
 }
-func ValidateTokenMiddleware(tokenManager TokenManager) gin.HandlerFunc {
-	/*
-		 	return func(c *gin.Context) {
-				var tokenString string
-				authHeader := c.GetHeader("Authorization")
-				if authHeader != "" {
-					tokenString = authHeader
-				} else {
-					cookieToken, err := c.Cookie("jwt_token")
-					if err == nil && cookieToken != "" {
-						tokenString = "Bearer " + cookieToken
-					} else {
-						tokenString = c.Query("access_token")
-						if tokenString == "" {
-							c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "empty auth header, cookie or query"})
-							return
-						}
-					}
-				}
-
-				headerParts := strings.Split(tokenString, " ")
-				if len(headerParts) != 2 || strings.ToLower(headerParts[0]) != "bearer" {
-					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid auth header format"})
+func ValidateTokenMiddleware(tokenManager TokenManager) ginext.HandlerFunc {
+	return func(c *ginext.Context) {
+		var tokenString string
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			tokenString = authHeader
+		} else {
+			cookieToken, err := c.Cookie("jwt_token")
+			if err == nil && cookieToken != "" {
+				tokenString = "Bearer " + cookieToken
+			} else {
+				tokenString = c.Query("access_token")
+				if tokenString == "" {
+					c.AbortWithStatusJSON(http.StatusUnauthorized, ginext.H{"error": "empty auth header, cookie or query"})
 					return
 				}
-				token := headerParts[1]
-
-				userInfo, err := tokenManager.Parse(token)
-				if err != nil {
-					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: invalid or expired token"})
-					return
-				}
-
-				if userInfo == nil {
-					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: empty user info"})
-					return
-				}
-
-				c.Set("userInfo", userInfo)
-				ctx := context.WithValue(c.Request.Context(), "userInfo", userInfo)
-				c.Request = c.Request.WithContext(ctx)
-				c.Next()
 			}
-	*/
-	return func(c *gin.Context) {
-		tokenString, err := c.Cookie("jwt_token")
-		if err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
+		}
+
+		headerParts := strings.Split(tokenString, " ")
+		if len(headerParts) != 2 || strings.ToLower(headerParts[0]) != "bearer" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ginext.H{"error": "invalid auth header format"})
 			return
 		}
-		// проверить токен
-		userClaims, err := tokenManager.Parse(tokenString)
+		token := headerParts[1]
+
+		userInfo, err := tokenManager.Parse(token)
 		if err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ginext.H{"error": "unauthorized: invalid or expired token"})
 			return
 		}
-		// Передать информацию о пользователе в контекст
-		c.Set("userInfo", userClaims)
+		if userInfo == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ginext.H{"error": "unauthorized: empty user info"})
+			return
+		}
+
+		c.Set("userInfo", userInfo)
+		ctx := context.WithValue(c.Request.Context(), "userInfo", userInfo)
+		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
+
 }
 
 // RequireRole - middleware для проверки наличия хотя бы одной из требуемых ролей
-func RequireRole(requiredRoles ...Role) gin.HandlerFunc {
-	return func(c *gin.Context) {
+func RequireRole(requiredRoles ...Role) ginext.HandlerFunc {
+	return func(c *ginext.Context) {
 		// 1. Получаем UserInfo из контекста
 		claims, exists := c.Get("userInfo") // Используем ключ "userInfo"
 		if !exists {
@@ -127,13 +110,13 @@ func RequireRole(requiredRoles ...Role) gin.HandlerFunc {
 	}
 }
 
-// --- Helper function to get UserInfo from Gin context ---
+// --- Helper function to get UserInfo from ginext context ---
 // Эта функция может быть полезна в ваших обработчиках
 func GetUserInfoFromContext(ctx context.Context) (*UserInfo, bool) {
 	val := ctx.Value("userInfo")
 	userInfo, ok := val.(*UserInfo)
-	if ok {
-		return userInfo, ok
+	if !ok {
+		return nil, false
 	}
-	return nil, false
+	return userInfo, true
 }

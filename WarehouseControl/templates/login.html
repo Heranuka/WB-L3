@@ -118,8 +118,15 @@
         alert('Ошибка: ' + (data.error || data.message));
         return;
       }
-      // Токен спрятан в cookie, просто переходим на home
-      window.location.href = '/home';
+      const data = await res.json();
+      const token = data.token || data.AccessToken;
+ // Получаем токен из поля AccessToken
+      if (!token) {
+        alert('Токен не получен от сервера');
+        return;
+      }
+      localStorage.setItem('jwt_token', token);
+      window.location.href = '/home'; // Переход на главную страницу после логина
     } catch (err) {
       alert('Ошибка соединения с сервером');
     }

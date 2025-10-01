@@ -2,39 +2,90 @@ package main
 
 import (
 	"context"
-	"log/slog"
-	"sync"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	_ "wb-l3.7/docs"
+	"github.com/wb-go/wbf/zlog"
+	"golang.org/x/sync/errgroup"
 	"wb-l3.7/internal/components"
 	"wb-l3.7/internal/config"
 )
 
 func main() {
-	logger := components.SetupLogger("local")
-	config, err := config.LoadPath()
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		logger.Error("error  with config in main", slog.String("error", err.Error()))
-		return
+		log.Println(err)
+		os.Exit(1)
 	}
-	var wg sync.WaitGroup
+	zlog.Init()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	logger := zlog.Logger
 
-	comps, err := components.InitComponents(ctx, logger, config)
+	appCtx, cancel := context.WithCancel(context.Background())
+	eg, erctx := errgroup.WithContext(appCtx)
+
+	components, err := components.InitComponents(erctx, logger, cfg)
 	if err != nil {
-		logger.Error("could not initComponents in main", slog.String("error", err.Error()))
-		return
+		logger.Error().Err(err).Msg("Could not init components")
+		os.Exit(1)
 	}
 
-	wg.Add(1)
+	eg.Go(func() error {
+		if err := components.HttpServer.Run(erctx); err != nil {
+			if err.Error() == "http: Server closed" {
+				// Это нормальное завершение сервера при Shutdown
+				logger.Info().Msg("Http Server closed")
+				return nil
+			}
+			logger.Error().Err(err).Msg("The http Server failed")
+			return err
+		}
+		logger.Info().Msg("Http Server stopped")
+		return nil
+	})
+
+	quitChan := make(chan os.Signal, 1)
+	signal.Notify(quitChan, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case sig := <-quitChan:
+		logger.Info().Str("signal", sig.String()).Msg("Captured signal, initiating shutdown")
+		cancel()
+	case <-erctx.Done():
+		logger.Info().Msg("Error group context cancelled")
+		cancel()
+	}
+
+	// Ожидаем завершения рабочих горутин с таймаутом
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	doneChan := make(chan struct{})
 	go func() {
-		defer wg.Done()
-		if err := comps.HttpServer.Run(ctx); err != nil {
-			logger.Error("error in main while running httpserver", slog.String("error", err.Error()))
+		defer close(doneChan)
+		if err = eg.Wait(); err != nil {
+			logger.Error().Err(err).Msg("Application exited with error")
+		} else {
+			logger.Info().Msg("Application exited successfully")
 		}
 	}()
 
-	wg.Wait()
+	select {
+	case <-doneChan:
+	case <-shutdownCtx.Done():
+		logger.Warn().Msg("Forced shutdown after timeout")
+	}
+
+	if shutdownErr := components.Shutdown(); shutdownErr != nil {
+		logger.Error().Err(shutdownErr).Msg("Error during component shutdown")
+		os.Exit(1)
+	}
+
+	logger.Info().Msg("All components stopped gracefully. Flushing logs...")
+	// Можно добавить небольшую паузу, если нужно
+
+	logger.Info().Msg("Graceful shutdown complete")
 }

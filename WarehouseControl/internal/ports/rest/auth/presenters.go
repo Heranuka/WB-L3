@@ -20,9 +20,9 @@ type loginRequest struct {
 
 // Ответ с токенами после аутентификации
 type tokenResponse struct {
+	UserID       int64      `json:"userID"`
 	Nickname     string     `json:"nickname"`
-	UserID       int64      `json:"user_id"`
-	AccessToken  string     `json:"access_token"`
+	AccessToken  string     `json:"token"` // изменено с "AccessToken" на "token"
 	RefreshToken string     `json:"refresh_token"`
 	CreatedAt    time.Time  `json:"created_at"`
 	ExpiresAt    time.Time  `json:"expires_at"`

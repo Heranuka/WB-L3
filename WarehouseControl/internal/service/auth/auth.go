@@ -11,22 +11,27 @@ import (
 	"wb-l3.7/pkg/jwt"
 )
 
+//go:generate mockgen -source=auth.go -destination=mocks/mock.go
 type UserStorage interface {
 	SaveUser(ctx context.Context, user *domain.User) (int64, error)
 	GetUser(ctx context.Context, nickname string) (*domain.User, error)
-	SetSession(ctx context.Context, userID int64, session *domain.Session) error
-	GetBySession(ctx context.Context, refreshToken string) (*domain.User, error)
+}
+
+type TokensStorage interface {
+	StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt string) error
+	GetUserByRefreshToken(ctx context.Context, refreshToken string) (*domain.User, error)
 }
 
 type Auth struct {
 	storage         UserStorage
+	token           TokensStorage
 	tokenManager    jwt.TokenManager
 	hasher          hash.PasswordHasher
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
 }
 
-func NewAuth(cfg config.Config, storage UserStorage) (*Auth, error) {
+func NewAuth(cfg config.Config, userStorage UserStorage, tokenStorage TokensStorage) (*Auth, error) {
 	tokenManager, err := jwt.NewManager(cfg.AuthConfig.JWTSigningKey)
 	if err != nil {
 		return nil, err
@@ -38,7 +43,8 @@ func NewAuth(cfg config.Config, storage UserStorage) (*Auth, error) {
 	}
 
 	return &Auth{
-		storage:         storage,
+		storage:         userStorage,
+		token:           tokenStorage,
 		hasher:          hasher,
 		tokenManager:    tokenManager,
 		accessTokenTTL:  cfg.AuthConfig.AccessTokenTTL,
@@ -78,16 +84,14 @@ func (a *Auth) Login(ctx context.Context, nickname, password string) (*domain.To
 		return nil, nil, domain.ErrInvalidCredentials
 	}
 
-	session, err := a.CreateSession(ctx, user)
+	tokens, err := a.GenerateTokens(ctx, user)
 	if err != nil {
 		return nil, nil, fmt.Errorf("service.Auth.Login.CreateSession: %w", err)
 	}
-	return session, user, nil
+	return tokens, user, nil
 }
 
-func (a *Auth) CreateSession(ctx context.Context, user *domain.User) (*domain.Tokens, error) {
-	// --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-	// Передаем user.Roles в NewAccessToken
+func (a *Auth) GenerateTokens(ctx context.Context, user *domain.User) (*domain.Tokens, error) {
 	accessToken, err := a.tokenManager.NewJWT(user.ID, user.Nickname, user.Roles, a.accessTokenTTL)
 	if err != nil {
 		return nil, fmt.Errorf("service.Auth.CreateSession.accessToken: %w", err)
@@ -97,30 +101,24 @@ func (a *Auth) CreateSession(ctx context.Context, user *domain.User) (*domain.To
 	if err != nil {
 		return nil, fmt.Errorf("service.Auth.CreateSession.refreshToken: %w", err)
 	}
+	expiresAt := time.Now().Add(a.refreshTokenTTL).Format(time.RFC3339)
+	err = a.token.StoreRefreshToken(ctx, user.ID, refreshToken, expiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("service.Auth.CreateSession.storeRefreshToken: %w", err)
+	}
 
 	tokens := &domain.Tokens{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}
-
-	session := &domain.Session{
-		RefreshToken: refreshToken,
-		AccessToken:  accessToken,
-		ExpiresAt:    time.Now().UTC().Add(a.refreshTokenTTL),
-	}
-
-	err = a.storage.SetSession(ctx, user.ID, session)
-	if err != nil {
-		return nil, fmt.Errorf("service.Auth.CreateSession.SetSession: %w", err)
-	}
-
 	return tokens, nil
 }
+
 func (a *Auth) Refresh(ctx context.Context, token string) (*domain.Tokens, error) {
-	user, err := a.storage.GetBySession(ctx, token)
+	user, err := a.token.GetUserByRefreshToken(ctx, token)
 	if err != nil {
-		return nil, fmt.Errorf("service.Auth.Refresh.GetBySession: %w", err)
+		return nil, fmt.Errorf("service.Auth.Refresh.GetUserByRefreshToken: %w", err)
 	}
 
-	return a.CreateSession(ctx, user)
+	return a.GenerateTokens(ctx, user)
 }

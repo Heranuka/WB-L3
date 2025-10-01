@@ -12,7 +12,7 @@ CREATE TABLE tokens (
     id bigserial PRIMARY KEY,
     user_id bigint NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     refresh_token TEXT NOT NULL,
-    access_token TEXT NOT NULL,
+   /*  access_token TEXT NOT NULL, */
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ NOT NULL 
 );
@@ -29,9 +29,13 @@ CREATE TABLE items (
 );
 
 CREATE TABLE item_history (
-    id bigserial PRIMARY KEY,
-    item_id bigserial NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-    changed_by_user_id bigint NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-    change TEXT NOT NULL,
-    changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    id BIGSERIAL PRIMARY KEY,
+    item_id BIGINT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    changed_by_user_id BIGINT NULL REFERENCES users(id) ON DELETE SET NULL,
+    change_description TEXT NOT NULL,
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    version INT NOT NULL DEFAULT 0,
+    change_diff JSONB NULL
 );
+
+CREATE EXTENSION IF NOT EXISTS hstore;

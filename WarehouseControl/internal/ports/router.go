@@ -3,36 +3,51 @@ package ports
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/wb-go/wbf/ginext"
 	"wb-l3.7/internal/config"
 	"wb-l3.7/internal/ports/rest/auth"
 	"wb-l3.7/internal/ports/rest/items"
-	"wb-l3.7/internal/service/render"
+	"wb-l3.7/internal/ports/rest/renderer"
 	"wb-l3.7/pkg/jwt"
 )
 
 type Server struct {
-	logger *slog.Logger
+	logger zerolog.Logger
 	server *http.Server
 	cfg    *config.Config
 }
 
-func NewServer(config *config.Config, authService auth.ServiceAuth, itemsHistory items.HistoryStorage, itemsStorage items.ItemStorage, serviceRender render.Render, logger *slog.Logger, manager jwt.TokenManager) (*Server, error) {
-	httpHandler := auth.NewHandler(logger, authService, serviceRender)
+func NewServer(
+	config *config.Config,
+	authService auth.ServiceAuth,
+	itemsHistory items.HistoryStorage,
+	itemsStorage items.ItemStorage,
+	rendler renderer.RenderHandler,
+	logger zerolog.Logger,
+	manager jwt.TokenManager,
+) (*Server, error) {
+	logger.Info().Msg("Initializing HTTP handlers")
+
+	httpHandler := auth.NewHandler(logger, authService)
+	renderHandler := renderer.NewHandler(rendler)
 	itemsHandler := items.NewItemsHandler(logger, itemsStorage, itemsHistory) // исправить!!!!
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%s", config.Http.Port),
-		Handler:      InitRouter(httpHandler, itemsHandler, logger, manager),
+		Handler:      InitRouter(httpHandler, itemsHandler, renderHandler, logger, manager),
 		ReadTimeout:  config.Http.ReadTimeout,
 		WriteTimeout: config.Http.WriteTimeout,
 	}
+
+	logger.Info().
+		Str("addr", server.Addr).
+		Msg("Server instance created")
 
 	return &Server{
 		logger: logger,
@@ -41,81 +56,94 @@ func NewServer(config *config.Config, authService auth.ServiceAuth, itemsHistory
 	}, nil
 }
 
-func InitRouter(auth *auth.Handler, items *items.Handler, logger *slog.Logger, manager jwt.TokenManager) *gin.Engine {
-	r := gin.Default()
+func InitRouter(auth *auth.Handler, items *items.Handler, rend *renderer.Handler, logger zerolog.Logger, manager jwt.TokenManager) *ginext.Engine {
+	r := ginext.New()
 
 	r.LoadHTMLGlob("templates/*.html")
 	docsURL := ginSwagger.URL("http://localhost:8080/swagger/doc.json")
-	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:8080"}
-	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
-	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
-	config.AllowCredentials = true
+	corsConfig := cors.DefaultConfig()
+	// Вместо жёстко прописанного здесь, получаем AllowOrigins из конфига
+	corsConfig.AllowOrigins = []string{"http://localhost:8080", "http://localhost:8080/home", "http://localhost:8080/login"} // например []string{"http://localhost:8080", "https://mydomain.com"}
 
-	r.Use(cors.New(config))
+	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
+	corsConfig.AllowCredentials = true
 
-	r.GET("/", auth.RootRedirect)
-	r.GET("/login", auth.Loginpage)
-	r.GET("/register", auth.Registerpage)
-	r.POST("/user/register", auth.Register)    // Предполагается, что Register не требует аутентификации
-	r.POST("/user/login", auth.Login)          // Предполагается, что Login не требует аутентификации
-	r.POST("/user/refresh", auth.RefreshToken) // Предполагается, что Refresh не требует аутентификации
+	r.Use(cors.New(corsConfig))
+
+	r.Use(cors.New(corsConfig))
+
+	logger.Info().Msg("Registering routes")
+
+	r.GET("/", rend.RootRedirect)
+	r.GET("/home", jwt.ValidateTokenMiddleware(manager), rend.Home)
+
+	r.GET("/login", rend.Loginpage)
+	r.GET("/register", rend.Registerpage)
+	r.POST("/user/register", auth.Register)
+	r.POST("/user/login", auth.Login)
+	r.POST("/user/refresh", auth.RefreshToken)
+
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, docsURL))
 
-	// --- Маршруты для элементов, требующие роли ---
 	itemsGroup := r.Group("/items")
-	// Сначала применяем middleware для проверки токена
 	itemsGroup.Use(jwt.ValidateTokenMiddleware(manager))
-	// Затем применяем middleware для проверки роли
-	itemsGroup.Use(jwt.RequireRole(jwt.Admin, jwt.Manager)) // Только admin или manager
+	itemsGroup.Use(jwt.RequireRole(jwt.Admin, jwt.Manager))
 	{
-		// Обработчики, которые требуют наличия роли "admin" или "manager"
 		itemsGroup.POST("/create", items.CreateItemHandler)
 		itemsGroup.GET("/getall", items.GetItemsHandler)
+		itemsGroup.GET("/history/:id", items.GetItemHistoryHandler)
 		itemsGroup.PUT("/update/:id", items.UpdateItemHandler)
 		itemsGroup.DELETE("/delete/:id", items.DeleteItemHandler)
 	}
 
-	// --- Маршруты, доступные только для viewer ---
 	viewerGroup := r.Group("/viewer")
 	viewerGroup.Use(jwt.ValidateTokenMiddleware(manager))
-	viewerGroup.Use(jwt.RequireRole(jwt.Viewer)) // Только viewer
-	{
-		viewerGroup.GET("/home", auth.Homepage)
-	}
-	// --- Маршруты, доступные для всех аутентифицированных пользователей ---
-	// (здесь применяется только ValidateTokenMiddleware)
+	viewerGroup.Use(jwt.RequireRole(jwt.Viewer))
+
 	profileGroup := r.Group("/profile")
 	profileGroup.Use(jwt.ValidateTokenMiddleware(manager))
 	{
 		profileGroup.GET("/", items.GetUserProfileHandler)
 	}
 
+	logger.Info().
+		Int("routes_count", 12).
+		Msg("Routes registered successfully")
+
 	return r
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	errResult := make(chan error, 1)
+	errChan := make(chan error)
+
+	s.logger.Info().Str("addr", s.server.Addr).Msg("Starting HTTP server")
+
 	go func() {
-		s.logger.Info(fmt.Sprintf("starting listening: %s", s.server.Addr))
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("failed to run HTTP Server", slog.String("error", err.Error()))
-			errResult <- err
+			s.logger.Error().Err(err).Msg("HTTP server failed")
+			errChan <- err
 		} else {
-			errResult <- nil
+			s.logger.Info().Msg("HTTP server stopped")
+			errChan <- nil
 		}
-		close(errResult)
 	}()
 
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.cfg.Http.ShutdownTimeout)
 		defer cancel()
+
+		s.logger.Info().Msg("Context done, initiating server shutdown")
+
 		if err := s.server.Shutdown(shutdownCtx); err != nil {
-			s.logger.Error("failed to shutdown HTTP Server", slog.String("error", err.Error()))
+			s.logger.Error().Err(err).Msg("HTTP server shutdown failed")
+		} else {
+			s.logger.Info().Msg("HTTP server shutdown completed")
 		}
 		return ctx.Err()
-	case err := <-errResult:
+
+	case err := <-errChan:
 		return err
 	}
 }
@@ -123,8 +151,12 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.Http.ShutdownTimeout)
 	defer cancel()
-	err := s.server.Shutdown(ctx)
-	if err != nil {
-		s.logger.Error("failed to shutdown HTTP Server", slog.String("error", err.Error()))
+
+	s.logger.Info().Msg("Stopping HTTP server")
+
+	if err := s.server.Shutdown(ctx); err != nil {
+		s.logger.Error().Err(err).Msg("Failed to shutdown HTTP server")
+	} else {
+		s.logger.Info().Msg("HTTP server stopped gracefully")
 	}
 }

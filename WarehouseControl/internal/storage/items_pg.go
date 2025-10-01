@@ -4,22 +4,55 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"wb-l3.7/internal/domain"
 )
 
-func (pg *Postgres) CreateItem(ctx context.Context, item *domain.Item) (int64, error) {
-	now := time.Now()
-	item.CreatedAt = now
-	item.UpdatedAt = now
+type Items interface {
+	CreateItem(ctx context.Context, item *domain.Item, userID int64) (int64, error)
+	GetItem(ctx context.Context, itemID int64) (*domain.Item, error)
+	GetAllItems(ctx context.Context) ([]*domain.Item, error)
+	UpdateItem(ctx context.Context, item *domain.Item, userID int64) error
+	DeleteItem(ctx context.Context, itemID int64, userID int64) error
+}
+
+func (pg *Postgres) CreateItem(ctx context.Context, item *domain.Item, userID int64) (int64, error) {
+	tx, err := pg.db.Master.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Устанавливаем параметр сессии для триггера
+	// Формируем команду SET LOCAL с подставленным userID
+	setUserIDQuery := fmt.Sprintf("SET LOCAL myapp.current_user_id = %d", userID)
+	_, err = tx.ExecContext(ctx, setUserIDQuery)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
 
 	var id int64
 	query := `
-        INSERT INTO items (name, description, price, stock, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+        INSERT INTO items (name, description, price, stock)
+        VALUES ($1, $2, $3, $4) RETURNING id
     `
-	_ = pg.pool.QueryRow(ctx, query, item.Name, item.Description, item.Price, item.Stock, item.CreatedAt, item.UpdatedAt).Scan(&id)
+	err = tx.QueryRowContext(ctx, query, item.Name, item.Description, item.Price, item.Stock).Scan(&id)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
 
 	return id, nil
 }
@@ -32,7 +65,7 @@ func (pg *Postgres) GetItem(ctx context.Context, itemID int64) (*domain.Item, er
         WHERE id = $1
     `
 	item := &domain.Item{}
-	row := pg.pool.QueryRow(ctx, query, itemID)
+	row := pg.db.Master.QueryRowContext(ctx, query, itemID)
 	err := row.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.Stock, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -50,7 +83,7 @@ func (pg *Postgres) GetAllItems(ctx context.Context) ([]*domain.Item, error) {
         FROM items
         ORDER BY name
     `
-	rows, err := pg.pool.Query(ctx, query)
+	rows, err := pg.db.Master.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -69,20 +102,28 @@ func (pg *Postgres) GetAllItems(ctx context.Context) ([]*domain.Item, error) {
 }
 
 // UpdateItem обновляет существующий товар
-func (pg *Postgres) UpdateItem(ctx context.Context, item *domain.Item) error {
+func (pg *Postgres) UpdateItem(ctx context.Context, item *domain.Item, userID int64) error {
+
 	item.UpdatedAt = time.Now()
 	query := `
         UPDATE items
         SET name=$1, description=$2, price=$3, stock=$4, updated_at=$5
         WHERE id=$6
     `
-	res, err := pg.pool.Exec(ctx, query,
+
+	item.UpdatedAt = time.Now()
+
+	_, err := pg.db.Master.ExecContext(ctx, `SELECT set_config('myapp.current_user_id', $1, false)`, userID)
+	if err != nil {
+		return err
+	}
+	res, err := pg.db.Master.ExecContext(ctx, query,
 		item.Name, item.Description, item.Price, item.Stock, item.UpdatedAt, item.ID,
 	)
 	if err != nil {
 		return err
 	}
-	rowsAffected := res.RowsAffected()
+	rowsAffected, _ := res.RowsAffected()
 
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
@@ -91,16 +132,53 @@ func (pg *Postgres) UpdateItem(ctx context.Context, item *domain.Item) error {
 }
 
 // DeleteItem удаляет товар по ID
-func (pg *Postgres) DeleteItem(ctx context.Context, itemID int64) error {
+func (pg *Postgres) DeleteItem(ctx context.Context, itemID int64, userID int64) error {
 	query := `DELETE FROM items WHERE id=$1`
-	res, err := pg.pool.Exec(ctx, query, itemID)
+
+	_, err := pg.db.Master.ExecContext(ctx, `SELECT set_config('myapp.current_user_id', $1, false)`, userID)
 	if err != nil {
 		return err
 	}
-	rowsAffected := res.RowsAffected()
+	res, err := pg.db.Master.ExecContext(ctx, query, itemID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := res.RowsAffected()
 
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
 	}
 	return nil
 }
+
+/*
+func (pg *Postgres) GetItemHistory(ctx context.Context, itemID int64) ([]domain.ItemHistoryEntry, error) {
+	const query = `
+        SELECT id, item_id, changed_by_user_id, change, changed_at, version
+        FROM item_history
+        WHERE item_id = $1
+        ORDER BY version DESC
+    `
+
+	rows, err := pg.db.QueryContext(ctx, query, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []domain.ItemHistoryEntry
+	for rows.Next() {
+		var entry domain.ItemHistoryEntry
+		if err := rows.Scan(&entry.ID, &entry.ItemID, &entry.ChangedByUserID, &entry.Change, &entry.ChangedAt, &entry.Version); err != nil {
+			return nil, err
+		}
+		history = append(history, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return history, nil
+}
+*/

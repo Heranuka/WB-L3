@@ -1,4 +1,4 @@
-package auth
+/* package auth
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/rs/zerolog"
 	"wb-l3.7/internal/domain"
 	"wb-l3.7/internal/service/render"
 	"wb-l3.7/pkg/jwt"
@@ -20,12 +21,12 @@ type ServiceAuth interface {
 }
 
 type Handler struct {
-	logger *slog.Logger
+	logger zerolog.Logger
 	auth   ServiceAuth
 	render render.Render
 }
 
-func NewHandler(logger *slog.Logger, authService ServiceAuth, render render.Render) *Handler {
+func NewHandler(logger zerolog.Logger, authService ServiceAuth, render render.Render) *Handler {
 	return &Handler{
 		logger: logger,
 		auth:   authService,
@@ -43,11 +44,11 @@ func NewHandler(logger *slog.Logger, authService ServiceAuth, render render.Rend
 // @Success 200 {object} map[string]string
 // @Failure 400 {object} map[string]string
 // @Router /user/register [post]
-func (h *Handler) Register(c *gin.Context) {
+func (h *Handler) Register(c *ginext.Context) {
 	var register registerRequest
 
 	if err := c.Bind(&register); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
@@ -61,22 +62,22 @@ func (h *Handler) Register(c *gin.Context) {
 		var validateErrs validator.ValidationErrors
 		errors.As(err, &validateErrs)
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 	err := h.auth.Register(c.Request.Context(), register.Nickname, register.Password, roleToAssign)
 	if err != nil {
 		if errors.Is(err, domain.ErrNicknameAlreadyExist) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 			return
 		}
 
 		h.logger.Error("failed to register user", slog.String("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"Success": "success"})
+	c.JSON(http.StatusOK, ginext.H{"Success": "success"})
 }
 
 // Login godoc
@@ -90,30 +91,30 @@ func (h *Handler) Register(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /user/login [post]
-func (h *Handler) Login(c *gin.Context) {
+func (h *Handler) Login(c *ginext.Context) {
 	var logReq loginRequest
 
 	if err := c.Bind(&logReq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
 	if err := validator.New().Struct(logReq); err != nil {
 		var validateErrs validator.ValidationErrors
 		errors.As(err, &validateErrs)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
 	tokens, user, err := h.auth.Login(c.Request.Context(), logReq.Nickname, logReq.Password)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidCredentials) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 			return
 		}
 
 		h.logger.Error("failed to login user", slog.String("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
 		return
 	}
 
@@ -149,11 +150,11 @@ func (h *Handler) Login(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Router /user/refresh [post]
-func (h *Handler) RefreshToken(c *gin.Context) {
+func (h *Handler) RefreshToken(c *ginext.Context) {
 	var refresh refreshRequest
 
 	if err := c.Bind(&refresh); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
@@ -161,19 +162,19 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		var validateErrs validator.ValidationErrors
 		errors.As(err, &validateErrs)
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
 	tokens, err := h.auth.Refresh(c.Request.Context(), refresh.RefreshToken)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 			return
 		}
 
 		h.logger.Error("failed to refresh tokens", slog.String("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
@@ -181,33 +182,33 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 	}
-	c.JSON(http.StatusOK, gin.H{"success": tokenResp})
+	c.JSON(http.StatusOK, ginext.H{"success": tokenResp})
 }
 
-func (h *Handler) Homepage(c *gin.Context) {
+func (h *Handler) Homepage(c *ginext.Context) {
 	user, exists := c.Get("userInfo")
 	if !exists {
-		c.HTML(http.StatusOK, "home.html", gin.H{"User": nil})
+		c.HTML(http.StatusOK, "home.html", ginext.H{"User": nil})
 		return
 	}
 
 	if user == nil {
-		c.HTML(http.StatusOK, "home.html", gin.H{"User": nil})
+		c.HTML(http.StatusOK, "home.html", ginext.H{"User": nil})
 		return
 	}
 
-	c.HTML(http.StatusOK, "home.html", gin.H{"User": user})
+	c.HTML(http.StatusOK, "home.html", ginext.H{"User": user})
 }
 
-func (h *Handler) Loginpage(c *gin.Context) {
+func (h *Handler) Loginpage(c *ginext.Context) {
 	h.render.LoginPage(c.Writer)
 }
 
-func (h *Handler) Registerpage(c *gin.Context) {
+func (h *Handler) Registerpage(c *ginext.Context) {
 	h.render.RegisterPage(c.Writer)
 }
 
-func (a *Handler) RootRedirect(c *gin.Context) {
+func (a *Handler) RootRedirect(c *ginext.Context) {
 	userInfo, exists := c.Get("userInfo")
 	if !exists || userInfo == nil {
 		// Пользователь не авторизован — редирект на /login
@@ -216,4 +217,166 @@ func (a *Handler) RootRedirect(c *gin.Context) {
 	}
 	// Пользователь авторизован — редирект на домашнюю страницу
 	c.Redirect(http.StatusFound, "/home")
+}
+*/
+
+package auth
+
+import (
+	"context"
+	"errors"
+	"net/http"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/rs/zerolog"
+	"github.com/wb-go/wbf/ginext"
+	"wb-l3.7/internal/domain"
+	"wb-l3.7/pkg/jwt"
+)
+
+//go:generate mockgen -source=handlers.go -destination=mocks/mock.go
+type ServiceAuth interface {
+	Register(ctx context.Context, nickname, password string, roles []jwt.Role) error
+	Login(ctx context.Context, nickname, password string) (*domain.Tokens, *domain.User, error)
+	Refresh(ctx context.Context, token string) (*domain.Tokens, error)
+}
+
+type Handler struct {
+	logger zerolog.Logger
+	auth   ServiceAuth
+}
+
+func NewHandler(logger zerolog.Logger, authService ServiceAuth) *Handler {
+	return &Handler{
+		logger: logger,
+		auth:   authService,
+	}
+}
+
+// Register godoc
+func (h *Handler) Register(c *ginext.Context) {
+	var register registerRequest
+
+	if err := c.Bind(&register); err != nil {
+		h.logger.Warn().Err(err).Msg("Failed to bind register request")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	roleToAssign := register.Roles
+	if len(roleToAssign) == 0 {
+		roleToAssign = []jwt.Role{jwt.Viewer}
+	}
+
+	if err := validator.New().Struct(register); err != nil {
+		h.logger.Warn().Err(err).Msg("Validation failed for register request")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	err := h.auth.Register(c.Request.Context(), register.Nickname, register.Password, roleToAssign)
+	if err != nil {
+		if errors.Is(err, domain.ErrNicknameAlreadyExist) {
+			h.logger.Info().Str("nickname", register.Nickname).Msg("Nickname already exists")
+			c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+			return
+		}
+		h.logger.Error().Err(err).Msg("Failed to register user")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Info().Str("nickname", register.Nickname).Msg("User registered successfully")
+	c.JSON(http.StatusOK, ginext.H{"Success": "success"})
+}
+
+// Login godoc
+func (h *Handler) Login(c *ginext.Context) {
+	var logReq loginRequest
+
+	if err := c.Bind(&logReq); err != nil {
+		h.logger.Warn().Err(err).Msg("Failed to bind login request")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	if err := validator.New().Struct(logReq); err != nil {
+		h.logger.Warn().Err(err).Msg("Validation failed for login request")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	tokens, user, err := h.auth.Login(c.Request.Context(), logReq.Nickname, logReq.Password)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidCredentials) {
+			h.logger.Info().Str("nickname", logReq.Nickname).Msg("Invalid credentials")
+			c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+			return
+		}
+		h.logger.Error().Err(err).Msg("Failed to login user")
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
+		return
+	}
+
+	tokenResp := tokenResponse{
+		UserID:       user.ID,
+		Nickname:     user.Nickname,
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		CreatedAt:    tokens.CreatedAt,
+		ExpiresAt:    tokens.ExpiresAt,
+		Roles:        user.Roles,
+	}
+
+	c.SetCookie(
+		"jwt_token",
+		tokens.AccessToken,
+		3600*24, // cookie lifetime in seconds
+		"/",
+		"localhost",
+		false, // secure, true if HTTPS
+		true,  // httpOnly
+	)
+
+	h.logger.Info().Str("nickname", user.Nickname).Int64("userID", user.ID).Msg("User logged in successfully")
+
+	c.JSON(http.StatusOK, tokenResp)
+}
+
+// RefreshToken godoc
+func (h *Handler) RefreshToken(c *ginext.Context) {
+	var refresh refreshRequest
+
+	if err := c.Bind(&refresh); err != nil {
+		h.logger.Warn().Err(err).Msg("Failed to bind refresh token request")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	if err := validator.New().Struct(refresh); err != nil {
+		h.logger.Warn().Err(err).Msg("Validation failed for refresh token request")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	tokens, err := h.auth.Refresh(c.Request.Context(), refresh.RefreshToken)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			h.logger.Info().Msg("Refresh failed: user not found")
+			c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+			return
+		}
+		h.logger.Error().Err(err).Msg("Failed to refresh tokens")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
+		return
+	}
+
+	tokenResp := tokenResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+	}
+
+	h.logger.Info().Msg("Tokens refreshed successfully")
+
+	c.JSON(http.StatusOK, ginext.H{"success": tokenResp})
 }

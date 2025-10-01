@@ -24,20 +24,14 @@ type Tokens struct {
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 
-type Session struct {
-	RefreshToken string    `json:"refresh_token"`
-	AccessToken  string    `json:"access_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
-}
-
-type Room struct {
-	ID        int64 // bigint (bigserial) для ID
-	Name      string
-	CreatedAt time.Time `json:"created_at"`
-}
-
 type UserClaims struct {
 	UserID   int64      `json:"user_id"` // bigint
 	Nickname string     `json:"nickname"`
 	Roles    []jwt.Role `json:"roles"`
+}
+
+type UserInfo struct {
+	UserID   int64
+	Nickname string
+	Roles    []jwt.Role
 }
