@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"wb-l3.7/internal/domain"
 )
 
 type Token interface {
-	StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt string) error
+	StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt time.Time) error
 	GetUserByRefreshToken(ctx context.Context, refreshToken string) (*domain.User, error)
 }
 
@@ -23,11 +24,11 @@ func HashToken(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (pg *Postgres) StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt string) error {
+func (pg *Postgres) StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt time.Time) error {
 
 	_, err := pg.db.Master.ExecContext(ctx, `
-        INSERT INTO tokens (user_id, refresh_token, created_at, expires_at)
-        VALUES ($1, $2, NOW(), $3)
+        INSERT INTO tokens (user_id, refresh_token,expires_at)
+        VALUES ($1, $2, $3)
         ON CONFLICT (user_id) DO UPDATE
         SET refresh_token = EXCLUDED.refresh_token,
             expires_at = EXCLUDED.expires_at

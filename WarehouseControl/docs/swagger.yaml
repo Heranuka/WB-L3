@@ -1,53 +1,10 @@
 definitions:
-  auth.loginRequest:
+  domain.ChangeDiff:
     properties:
-      nickname:
-        type: string
-      password:
-        type: string
-    required:
-    - nickname
-    - password
-    type: object
-  auth.refreshRequest:
-    properties:
-      refresh_token:
-        type: string
-    required:
-    - refresh_token
-    type: object
-  auth.registerRequest:
-    properties:
-      nickname:
-        type: string
-      password:
-        type: string
-      roles:
-        items:
-          $ref: '#/definitions/jwt.Role'
-        type: array
-    required:
-    - nickname
-    - password
-    type: object
-  auth.tokenResponse:
-    properties:
-      access_token:
-        type: string
-      created_at:
-        type: string
-      expires_at:
-        type: string
-      nickname:
-        type: string
-      refresh_token:
-        type: string
-      roles:
-        items:
-          $ref: '#/definitions/jwt.Role'
-        type: array
-      user_id:
-        type: integer
+      new:
+        description: новое значение
+      old:
+        description: старое значение
     type: object
   domain.Item:
     properties:
@@ -66,20 +23,59 @@ definitions:
       updated_at:
         type: string
     type: object
-  domain.ItemHistoryEntry:
+  domain.ItemHistoryRecord:
     properties:
-      change:
-        description: 'Описание изменения, например: "price updated from 100.00 to
-          120.00"'
+      change_description:
         type: string
+      change_diff:
+        additionalProperties:
+          $ref: '#/definitions/domain.ChangeDiff'
+        description: ключ - название поля
+        type: object
       changed_at:
         type: string
-      changed_by_user_id:
+      changed_by_user:
         type: string
       id:
         type: integer
       item_id:
         type: integer
+      version:
+        type: integer
+    type: object
+  domain.Tokens:
+    properties:
+      access-token:
+        type: string
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        description: bigint (bigserial) в базе
+        format: int64
+        type: integer
+      refresh-token:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  domain.User:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      nickname:
+        type: string
+      password_hash:
+        type: string
+      roles:
+        items:
+          $ref: '#/definitions/jwt.Role'
+        type: array
+      updated_at:
+        type: string
     type: object
   jwt.Role:
     enum:
@@ -94,44 +90,103 @@ definitions:
 info:
   contact: {}
 paths:
-  /items/{id}:
-    get:
-      description: Возвращает товар по заданному ID
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Авторизация пользователя по никнейму и паролю, получение JWT токенов
       parameters:
-      - description: ID товара
-        in: path
-        name: id
+      - description: 'Данные для входа: никнейм и пароль'
+        in: body
+        name: input
         required: true
-        type: integer
+        schema:
+          $ref: '#/definitions/domain.User'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Item'
-        "404":
-          description: Not Found
+            $ref: '#/definitions/domain.Tokens'
+        "401":
+          description: Неверные учетные данные
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            type: string
         "500":
-          description: Internal Server Error
+          description: Ошибка сервиса
           schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Получить товар по ID
+            type: string
+      summary: Вход в систему
       tags:
-      - items
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Обновляет JWT и refresh токены по действующему refresh токену
+      parameters:
+      - description: Refresh токен
+        in: body
+        name: token
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Tokens'
+        "401":
+          description: Некорректный refresh токен
+          schema:
+            type: string
+        "500":
+          description: Ошибка при обновлении токенов
+          schema:
+            type: string
+      summary: Обновление токенов
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Регистрация нового пользователя по никнейму и паролю
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/domain.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешная регистрация
+          schema:
+            type: string
+        "400":
+          description: Некорректные данные
+          schema:
+            type: string
+        "500":
+          description: Ошибка сервиса
+          schema:
+            type: string
+      summary: Регистрация пользователя
+      tags:
+      - auth
   /items/create:
     post:
       consumes:
       - application/json
-      description: Создает новый товар и возвращает его id
+      description: Создает новый предмет и возвращает его ID
       parameters:
-      - description: Данные товара
+      - description: Данные нового предмета
         in: body
         name: item
         required: true
@@ -141,30 +196,32 @@ paths:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Успешное создание
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: Bad Request
+          description: Некорректные данные
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Ошибка сервиса
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Создать новый товар
+      summary: Создать новый предмет
       tags:
       - items
   /items/delete/{id}:
     delete:
-      description: Удаляет товар по ID
+      consumes:
+      - application/json
+      description: Удаляет предмет по ID
       parameters:
-      - description: ID товара
+      - description: ID предмета
         in: path
         name: id
         required: true
@@ -173,52 +230,56 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Сообщение об успехе
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Предмет не найден
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Ошибка сервиса
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Удалить товар
+      summary: Удалить предмет
       tags:
       - items
-  /items/getll:
+  /items/getall:
     get:
-      description: Возвращает список всех товаров
+      consumes:
+      - application/json
+      description: Возвращает список всех предметов
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Массив предметов
           schema:
             items:
               $ref: '#/definitions/domain.Item'
             type: array
         "500":
-          description: Internal Server Error
+          description: Ошибка сервиса
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Получить список товаров
+      summary: Получить все предметы
       tags:
       - items
   /items/history/{id}:
     get:
-      description: Возвращает историю изменений товара по ID
+      consumes:
+      - application/json
+      description: Возвращает историю изменений выбранного предмета
       parameters:
-      - description: ID товара
+      - description: ID предмета
         in: path
         name: id
         required: true
@@ -230,35 +291,35 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.ItemHistoryEntry'
+              $ref: '#/definitions/domain.ItemHistoryRecord'
             type: array
         "404":
-          description: Not Found
+          description: История не найдена
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Ошибка сервиса
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Получить историю изменений товара
+      summary: История изменений предмета
       tags:
-      - items history
+      - items
   /items/update/{id}:
     put:
       consumes:
       - application/json
-      description: Обновляет товар по ID
+      description: Обновляет данные предмета по ID
       parameters:
-      - description: ID товара
+      - description: ID предмета
         in: path
         name: id
         required: true
         type: integer
-      - description: Данные для обновления
+      - description: Обновленные данные предмета
         in: body
         name: item
         required: true
@@ -268,176 +329,52 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Успешное обновление
           schema:
             additionalProperties:
               type: string
             type: object
         "400":
-          description: Bad Request
+          description: Некорректные данные
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Предмет не найден
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Ошибка сервиса
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Обновить товар
+      summary: Обновить предмет
       tags:
       - items
-  /logchange/{user_id}:
-    get:
-      description: Логирует изменение для пользователя по user_id
-      parameters:
-      - description: ID пользователя
-        in: path
-        name: user_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Добавить запись в лог изменений
-      tags:
-      - history
   /profile:
     get:
-      description: Возвращает информацию о текущем пользователе из JWT
+      consumes:
+      - application/json
+      description: Возвращает информацию о текущем пользователе по токену
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Информация о пользователе
           schema:
             additionalProperties: true
             type: object
         "500":
-          description: Internal Server Error
+          description: Ошибка сервера
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Получить профиль пользователя
+      summary: Получение профиля пользователя
       tags:
-      - profile
-  /user/login:
-    post:
-      consumes:
-      - application/json
-      description: Авторизация и получение JWT токенов
-      parameters:
-      - description: Данные для логина
-        in: body
-        name: login
-        required: true
-        schema:
-          $ref: '#/definitions/auth.loginRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/auth.tokenResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Авторизация пользователя
-      tags:
-      - auth
-  /user/refresh:
-    post:
-      consumes:
-      - application/json
-      description: Обновить access и refresh токен с помощью refresh token
-      parameters:
-      - description: Refresh token для обновления
-        in: body
-        name: refresh
-        required: true
-        schema:
-          $ref: '#/definitions/auth.refreshRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Обновление JWT токенов
-      tags:
-      - auth
-  /user/register:
-    post:
-      consumes:
-      - application/json
-      description: Регистрация нового пользователя с ролью
-      parameters:
-      - description: Данные для регистрации
-        in: body
-        name: register
-        required: true
-        schema:
-          $ref: '#/definitions/auth.registerRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Регистрация пользователя
-      tags:
-      - auth
+      - items
 swagger: "2.0"

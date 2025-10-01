@@ -95,17 +95,17 @@ func (mr *MockItemStorageMockRecorder) GetItem(ctx, itemID interface{}) *gomock.
 }
 
 // UpdateItem mocks base method.
-func (m *MockItemStorage) UpdateItem(ctx context.Context, item *domain.Item) error {
+func (m *MockItemStorage) UpdateItem(ctx context.Context, item *domain.Item, userID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateItem", ctx, item)
+	ret := m.ctrl.Call(m, "UpdateItem", ctx, item, userID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateItem indicates an expected call of UpdateItem.
-func (mr *MockItemStorageMockRecorder) UpdateItem(ctx, item interface{}) *gomock.Call {
+func (mr *MockItemStorageMockRecorder) UpdateItem(ctx, item, userID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateItem", reflect.TypeOf((*MockItemStorage)(nil).UpdateItem), ctx, item)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateItem", reflect.TypeOf((*MockItemStorage)(nil).UpdateItem), ctx, item, userID)
 }
 
 // MockHistoryStorage is a mock of HistoryStorage interface.

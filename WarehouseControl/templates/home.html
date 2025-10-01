@@ -243,6 +243,8 @@
   let items = [];
   let currentHistory = [];
   let currentHistoryItemId = null;
+  let tokenExpiryTime = null; // Время, когда истекает токен
+  let refreshTimeoutId = null;
   let currentHistoryFilters = {user: '', dateStart: '', dateEnd: ''};
 
   async function fetchWithAuth(url, options = {}) {
@@ -440,6 +442,85 @@
 
   window.onload = () => {
     loadItems();
+  };
+
+    function setupTokenRefresh() {
+    const token = localStorage.getItem('jwt_token');
+    const tokenPayload = parseJwt(token);
+    if (tokenPayload && tokenPayload.exp) {
+      // Время истечения токена (в секундах), переводим в миллисекунды
+      tokenExpiryTime = tokenPayload.exp * 1000;
+      const now = Date.now();
+      const delay = tokenExpiryTime - now - 60 * 1000; // за 1 минуту до истечения
+      if (delay > 0) {
+        if (refreshTimeoutId) clearTimeout(refreshTimeoutId);
+        refreshTimeoutId = setTimeout(refreshToken, delay);
+      }
+    }
+  }
+
+  // Распарсить JWT и вернуть payload
+  function parseJwt(token) {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Функция для обновления токена
+  async function refreshToken() {
+    try {
+      const response = await fetch('/user/refresh', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
+        }
+      });
+      if (!response.ok) throw new Error('Ошибка обновления токена');
+      const data = await response.json();
+      // Предполагается, что сервер возвращает новые токены
+      localStorage.setItem('jwt_token', data.access_token);
+      // Перезапускаем таймер
+      setupTokenRefresh();
+    } catch (err) {
+      alert('Обновление токена не удалось, войдите заново');
+      window.location.href = '/login';
+    }
+  }
+
+  // Перед каждым запросом вставляем актуальный токен
+  async function fetchWithAuth(url, options = {}) {
+    const token = localStorage.getItem('jwt_token');
+    if (!options.headers) options.headers = {};
+    if (token) {
+      options.headers['Authorization'] = 'Bearer ' + token;
+    }
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+      alert('Сессия истекла. Пожалуйста, войдите снова.');
+      window.location.href = '/login';
+      return null;
+    }
+    return response;
+  }
+
+  // при успешном входе или обновлении токена вызывайте setupTokenRefresh()
+  async function loginOrRefresh() {
+    // После получения токена
+    localStorage.setItem('jwt_token', 'YOUR_TOKEN_HERE');
+    setupTokenRefresh();
+  }
+
+  // Инициализация при загрузке страницы
+  window.onload = () => {
+    loadItems();
+    setupTokenRefresh(); // запуск таймера при загрузке
   };
 </script>
 </body>

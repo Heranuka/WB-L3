@@ -44,12 +44,6 @@ const (
 	Update Permission = "update"
 )
 
-var rolePermissions = map[Role][]Permission{
-	Admin:   {Read, Write, Delete, Update},
-	Manager: {Read, Write},
-	Viewer:  {Read},
-}
-
 func NewManager(signingKey string) (*JWTManager, error) {
 	if signingKey == "" {
 		return nil, fmt.Errorf("empty signing key")

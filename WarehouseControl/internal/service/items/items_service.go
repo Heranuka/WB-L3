@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"wb-l3.7/internal/domain"
 	"wb-l3.7/pkg/jwt"
@@ -16,7 +15,7 @@ type ItemStorage interface {
 	GetItem(ctx context.Context, itemID int64) (*domain.Item, error)
 	GetAllItems(ctx context.Context) ([]*domain.Item, error)
 	UpdateItem(ctx context.Context, item *domain.Item, userID int64) error
-	DeleteItem(ctx context.Context, itemID int64, userID int64) error
+	DeleteItem(ctx context.Context, itemID int64) error
 }
 
 type HistoryStorage interface {
@@ -36,11 +35,14 @@ func NewItemService(itemStorage ItemStorage, historyStorage HistoryStorage) *Ite
 	}
 }
 func (s *ItemService) CreateItem(ctx context.Context, item *domain.Item, userID int64) (int64, error) {
-	userInfo, _ := jwt.GetUserInfoFromContext(ctx)
-	if userInfo == nil {
+	userInfo, exists := jwt.GetUserInfoFromContext(ctx)
+	if !exists {
 		return -1, fmt.Errorf("authentication info missing")
 	}
 
+	if userInfo.UserID != userID {
+		return -1, fmt.Errorf("userID mismatch: user from context %d vs param %d", userInfo.UserID, userID)
+	}
 	itemID, err := s.itemStorage.CreateItem(ctx, item, userID)
 	if err != nil {
 		return -1, fmt.Errorf("item service: create item failed: %w", err)
@@ -63,50 +65,31 @@ func (s *ItemService) CreateItem(ctx context.Context, item *domain.Item, userID 
 
 	return itemID, nil
 }
-
 func (s *ItemService) UpdateItem(ctx context.Context, item *domain.Item, userID int64) error {
-	userInfo, _ := jwt.GetUserInfoFromContext(ctx)
-	if userInfo == nil {
+	userInfo, exists := jwt.GetUserInfoFromContext(ctx)
+	if !exists {
 		return fmt.Errorf("authentication info missing")
 	}
-
-	/* 	currentItem, err := s.itemStorage.GetItem(ctx, item.ID)
-	   	if err != nil {
-	   		return fmt.Errorf("item service: get item for update failed: %w", err)
-	   	}
-	*/
-	item.UpdatedAt = time.Now()
+	if userInfo.UserID != userID {
+		return fmt.Errorf("userID mismatch: user from context %d vs param %d", userInfo.UserID, userID)
+	}
 
 	err := s.itemStorage.UpdateItem(ctx, item, userID)
 	if err != nil {
 		return fmt.Errorf("item service: update item failed: %w", err)
 	}
 
-	/*
-	   changes, changeDiff := s.GenerateChangeDescriptionAndDiff(currentItem, item)
-	   if changes != "" {
-	       err = s.historyStorage.LogChange(ctx, userInfo.UserID, item.ID, changes, changeDiff)
-	       if err != nil {
-	           fmt.Printf("Failed to log item update for item %d: %v\n", item.ID, err)
-	       }
-	   }
-	*/
-
 	return nil
 }
 
-func (s *ItemService) DeleteItem(ctx context.Context, itemID int64, userID int64) error {
-	userInfo, _ := jwt.GetUserInfoFromContext(ctx)
-	if userInfo == nil {
-		return fmt.Errorf("authentication info missing")
-	}
+func (s *ItemService) DeleteItem(ctx context.Context, itemID int64) error {
 
 	/* itemToDelete, err := s.itemStorage.GetItem(ctx, itemID)
 	if err != nil {
 		return fmt.Errorf("item service: get item for delete failed: %w", err)
 	} */
 
-	err := s.itemStorage.DeleteItem(ctx, itemID, userID)
+	err := s.itemStorage.DeleteItem(ctx, itemID)
 	if err != nil {
 		return fmt.Errorf("item service: delete item failed: %w", err)
 	}

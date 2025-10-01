@@ -40,8 +40,8 @@ func (pg *Postgres) SaveUser(ctx context.Context, user *domain.User) (int64, err
 
 func (pg *Postgres) GetUser(ctx context.Context, nickname string) (*domain.User, error) {
 	row := pg.db.Master.QueryRowContext(ctx, "SELECT id, nickname, password_hash, roles, created_at, updated_at FROM users WHERE nickname = $1", nickname)
-
 	var user domain.User
+
 	var rolesJSON []byte
 	err := row.Scan(&user.ID, &user.Nickname, &user.PasswordHash, &rolesJSON, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
@@ -53,7 +53,7 @@ func (pg *Postgres) GetUser(ctx context.Context, nickname string) (*domain.User,
 
 	err = json.Unmarshal(rolesJSON, &user.Roles)
 	if err != nil {
-		// handle error
+		return nil, err
 	}
 	return &user, nil
 }

@@ -2,6 +2,7 @@ package items
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -17,7 +18,7 @@ type ItemStorage interface {
 	GetItem(ctx context.Context, itemID int64) (*domain.Item, error)
 	GetAllItems(ctx context.Context) ([]*domain.Item, error)
 	UpdateItem(ctx context.Context, item *domain.Item, userID int64) error
-	DeleteItem(ctx context.Context, itemID int64, userID int64) error
+	DeleteItem(ctx context.Context, itemID int64) error
 }
 
 type HistoryStorage interface {
@@ -45,38 +46,54 @@ func NewItemsHandler(
 	}
 }
 
+// GetUserProfileHandler godoc
+// @Summary Получение профиля пользователя
+// @Description Возвращает информацию о текущем пользователе по токену
+// @Tags items
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Информация о пользователе"
+// @Failure 500 {object} map[string]string "Ошибка сервера"
+// @Router /profile [get]
 func (h *Handler) GetUserProfileHandler(c *ginext.Context) {
-	userInfo, exists := c.Get("userInfo")
+	userInfo, exists := jwt.GetUserInfoFromContext(c.Request.Context())
 	if !exists {
 		h.logger.Error().Msg("authentication info not found in context")
 		c.JSON(http.StatusInternalServerError, ginext.H{"error": "authentication info not found"})
 		return
 	}
-	userClaims, ok := userInfo.(*jwt.UserInfo)
-	if !ok {
-		h.logger.Error().Msg("invalid user info type in context")
-		c.JSON(http.StatusInternalServerError, ginext.H{"error": "invalid user info type"})
-		return
-	}
 
-	h.logger.Info().Int64("userID", userClaims.UserID).Msg("User profile requested")
+	h.logger.Info().Int64("userID", userInfo.UserID).Msg("User profile requested")
 
 	c.JSON(http.StatusOK, ginext.H{
-		"id":       userClaims.UserID,
-		"nickname": userClaims.Nickname,
-		"roles":    userClaims.Roles,
+		"id":       userInfo.UserID,
+		"nickname": userInfo.Nickname,
+		"roles":    userInfo.Roles,
 	})
 }
 
+// @Summary Create a new item
+// @Description Creates a new item with the provided details.
+// @Tags Items
+// @Accept json
+// @Produce json
+// @Param item body domain.Item true "Item data to create"
+// @Param Authorization header string true "Bearer JWT Token"
+// @Security BearerAuth
+// @Success 201 {object} ginext.H{"message": string, "id": integer} "Item created successfully"
+// @Failure 400 {object} ginext.H{"error": string} "Invalid request body or missing user ID"
+// @Failure 401 {object} ginext.H{"error": string} "Unauthorized - Missing or invalid authentication token"
+// @Failure 403 {object} ginext.H{"error": string} "Forbidden - User does not have the required permissions"
+// @Failure 500 {object} ginext.H{"error": string} "Internal server error"
+// @Router /items/create [post]
 func (h *Handler) CreateItemHandler(c *ginext.Context) {
 	var req domain.Item
-	userInfo, exists := c.Get("userInfo")
+	userInfo, exists := jwt.GetUserInfoFromContext(c.Request.Context())
 	if !exists {
 		h.logger.Warn().Msg("user_id is not correct")
 		c.JSON(http.StatusBadRequest, "user_id is not correct")
 		return
 	}
-	userID := userInfo.(*jwt.UserInfo).UserID
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn().Err(err).Msg("Invalid create item request")
@@ -84,7 +101,7 @@ func (h *Handler) CreateItemHandler(c *ginext.Context) {
 		return
 	}
 
-	itemID, err := h.itemService.CreateItem(c.Request.Context(), &req, userID)
+	itemID, err := h.itemService.CreateItem(c.Request.Context(), &req, userInfo.UserID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("Failed to create item")
 		c.JSON(http.StatusInternalServerError, ginext.H{"error": "failed to create item"})
@@ -96,6 +113,16 @@ func (h *Handler) CreateItemHandler(c *ginext.Context) {
 	c.JSON(http.StatusCreated, ginext.H{"message": "Item created successfully", "id": itemID})
 }
 
+// @Summary Get all items
+// @Description Retrieves a list of all items available in the system.
+// @Tags Items
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} domain.Item "A list of items"
+// @Failure 401 {object} ginext.H{"error": string} "Unauthorized - Missing or invalid authentication token"
+// @Failure 403 {object} ginext.H{"error": string} "Forbidden - User does not have the required permissions"
+// @Failure 500 {object} ginext.H{"error": string} "Internal server error"
+// @Router /items/getall [get]
 func (h *Handler) GetItemsHandler(c *ginext.Context) {
 	items, err := h.itemService.GetAllItems(c.Request.Context())
 	if err != nil {
@@ -106,6 +133,18 @@ func (h *Handler) GetItemsHandler(c *ginext.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+/*
+// GetItemHandler godoc
+// @Summary Получить предмет по ID
+// @Description Возвращает предмет по его ID
+// @Tags items
+// @Accept json
+// @Produce json
+// @Param id path int true "ID предмета"
+// @Success 200 {object} domain.Item
+// @Failure 404 {object} map[string]string "Предмет не найден"
+// @Failure 500 {object} map[string]string "Ошибка сервиса"
+// @Router /items/{id} [get]
 func (h *Handler) GetItemHandler(c *ginext.Context) {
 	itemIDStr := c.Param("id")
 	itemID, err := strconv.ParseInt(itemIDStr, 10, 64)
@@ -127,16 +166,32 @@ func (h *Handler) GetItemHandler(c *ginext.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, item)
-}
+} */
+
+// @Summary Update an item by ID
+// @Description Updates an existing item in the system.
+// @Tags Items
+// @Accept json
+// @Produce json
+// @Param id path int true "The unique identifier of the item to update"
+// @Param item body domain.Item true "The item data to update"
+// @Security BearerAuth
+// @Success 200 {object} ginext.H{"message": string} "Item updated successfully"
+// @Failure 400 {object} ginext.H{"error": string} "Invalid item ID supplied or invalid request body"
+// @Failure 401 {object} ginext.H{"error": string} "Unauthorized - Missing or invalid authentication token"
+// @Failure 403 {object} ginext.H{"error": string} "Forbidden - User does not have the required permissions"
+// @Failure 404 {object} ginext.H{"error": string} "Item not found"
+// @Failure 500 {object} ginext.H{"error": string} "Internal server error"
+// @Router /items/update/{id} [put]
 
 func (h *Handler) UpdateItemHandler(c *ginext.Context) {
-	userInfo, exists := c.Get("userInfo")
+	userInfo, exists := jwt.GetUserInfoFromContext(c.Request.Context())
 	if !exists {
-		h.logger.Warn().Msg("user_id is not correct")
-		c.JSON(http.StatusBadRequest, "user_id is not correct")
+		h.logger.Warn().Msg("authentication info missing")
+		c.JSON(http.StatusBadRequest, "authentication info missing")
 		return
 	}
-	userID := userInfo.(*jwt.UserInfo).UserID
+
 	itemIDStr := c.Param("id")
 	itemID, err := strconv.ParseInt(itemIDStr, 10, 64)
 	if err != nil {
@@ -162,7 +217,7 @@ func (h *Handler) UpdateItemHandler(c *ginext.Context) {
 	}
 	req.ID = itemID
 
-	err = h.itemService.UpdateItem(c.Request.Context(), &req, userID)
+	err = h.itemService.UpdateItem(c.Request.Context(), &req, userInfo.UserID)
 	if err != nil {
 		if err == domain.ErrNotFound {
 			h.logger.Info().Int64("itemID", itemID).Msg("Item to update not found")
@@ -178,25 +233,32 @@ func (h *Handler) UpdateItemHandler(c *ginext.Context) {
 	c.JSON(http.StatusOK, ginext.H{"message": "Item updated successfully"})
 }
 
+// @Summary Delete an item by ID
+// @Description Deletes a specific item from the system by its unique identifier.
+// @Tags Items
+// @Accept json
+// @Produce json
+// @Param id path int true "The unique identifier of the item to delete"
+// @Security BearerAuth
+// @Success 200 {object} object{message=string} "Item deleted successfully"
+// @Failure 400 {object} ginext.H{"error": string} "Invalid item ID supplied"
+// @Failure 401 {object} ginext.H{"error": string} "Unauthorized - Missing or invalid authentication token"
+// @Failure 403 {object} ginext.H{"error": string} "Forbidden - User does not have the required permissions"
+// @Failure 404 {object} ginext.H{"error": string} "Item not found"
+// @Failure 500 {object} ginext.H{"error": string} "Internal server error"
+// @Router /items/delete/{id} [delete]
 func (h *Handler) DeleteItemHandler(c *ginext.Context) {
-	userInfo, exists := c.Get("userInfo")
-	if !exists {
-		h.logger.Warn().Msg("user_id is not correct")
-		c.JSON(http.StatusBadRequest, "user_id is not correct")
-		return
-	}
-	userID := userInfo.(*jwt.UserInfo).UserID
 	itemIDStr := c.Param("id")
 	itemID, err := strconv.ParseInt(itemIDStr, 10, 64)
 	if err != nil {
 		h.logger.Warn().Err(err).Str("param", itemIDStr).Msg("Invalid item ID parameter")
-		c.JSON(http.StatusNotFound, ginext.H{"error": "invalid item ID"})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": "invalid item ID"})
 		return
 	}
 
-	err = h.itemService.DeleteItem(c.Request.Context(), itemID, userID)
+	err = h.itemService.DeleteItem(c.Request.Context(), itemID)
 	if err != nil {
-		if err == domain.ErrNotFound {
+		if errors.Is(err, domain.ErrNotFound) {
 			h.logger.Info().Int64("itemID", itemID).Msg("Item to delete not found")
 			c.JSON(http.StatusNotFound, ginext.H{"error": "item not found"})
 			return
@@ -210,19 +272,30 @@ func (h *Handler) DeleteItemHandler(c *ginext.Context) {
 	c.JSON(http.StatusOK, ginext.H{"message": "Item deleted successfully"})
 }
 
+// GetItemHistoryHandler godoc
+// @Summary История изменений предмета
+// @Description Возвращает историю изменений выбранного предмета
+// @Tags items
+// @Accept json
+// @Produce json
+// @Param id path int true "ID предмета"
+// @Success 200 {array} domain.ItemHistoryRecord
+// @Failure 404 {object} map[string]string "История не найдена"
+// @Failure 500 {object} map[string]string "Ошибка сервиса"
+// @Router /items/history/{id} [get]
 func (h *Handler) GetItemHistoryHandler(c *ginext.Context) {
 	itemIDStr := c.Param("id")
 	itemID, err := strconv.ParseInt(itemIDStr, 10, 64)
 	if err != nil {
 		h.logger.Warn().Err(err).Str("param", itemIDStr).Msg("Invalid item ID for history request")
-		c.JSON(http.StatusNotFound, ginext.H{"error": "invalid item ID"})
+		c.JSON(http.StatusBadRequest, ginext.H{"error": "invalid item ID"})
 		return
 	}
 
 	history, err := h.historyStorage.GetItemHistory(c.Request.Context(), itemID)
-	if err != nil {
+	if err != nil || len(history) <= 0 {
 		if err == domain.ErrNotFound {
-			h.logger.Info().Int64("itemID", itemID).Msg("Item history not found")
+			h.logger.Info().Msg("Item history not found")
 			c.JSON(http.StatusNotFound, ginext.H{"error": "item not found"})
 			return
 		}

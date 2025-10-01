@@ -10,6 +10,7 @@ import (
 
 	"github.com/wb-go/wbf/zlog"
 	"golang.org/x/sync/errgroup"
+	_ "wb-l3.7/docs"
 	"wb-l3.7/internal/components"
 	"wb-l3.7/internal/config"
 )

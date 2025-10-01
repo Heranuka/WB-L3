@@ -15,7 +15,7 @@ type Items interface {
 	GetItem(ctx context.Context, itemID int64) (*domain.Item, error)
 	GetAllItems(ctx context.Context) ([]*domain.Item, error)
 	UpdateItem(ctx context.Context, item *domain.Item, userID int64) error
-	DeleteItem(ctx context.Context, itemID int64, userID int64) error
+	DeleteItem(ctx context.Context, itemID int64) error
 }
 
 func (pg *Postgres) CreateItem(ctx context.Context, item *domain.Item, userID int64) (int64, error) {
@@ -103,6 +103,15 @@ func (pg *Postgres) GetAllItems(ctx context.Context) ([]*domain.Item, error) {
 
 // UpdateItem обновляет существующий товар
 func (pg *Postgres) UpdateItem(ctx context.Context, item *domain.Item, userID int64) error {
+	tx, err := pg.db.Master.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
 
 	item.UpdatedAt = time.Now()
 	query := `
@@ -112,34 +121,47 @@ func (pg *Postgres) UpdateItem(ctx context.Context, item *domain.Item, userID in
     `
 
 	item.UpdatedAt = time.Now()
-
-	_, err := pg.db.Master.ExecContext(ctx, `SELECT set_config('myapp.current_user_id', $1, false)`, userID)
+	setUserIDQuery := fmt.Sprintf("SET LOCAL myapp.current_user_id = %d", userID)
+	_, err = tx.ExecContext(ctx, setUserIDQuery)
 	if err != nil {
 		return err
 	}
-	res, err := pg.db.Master.ExecContext(ctx, query,
+	res, err := tx.ExecContext(ctx, query,
 		item.Name, item.Description, item.Price, item.Stock, item.UpdatedAt, item.ID,
 	)
 	if err != nil {
 		return err
 	}
-	rowsAffected, _ := res.RowsAffected()
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to number of affected rows : %w", err)
+	}
 
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	return nil
 }
 
 // DeleteItem удаляет товар по ID
-func (pg *Postgres) DeleteItem(ctx context.Context, itemID int64, userID int64) error {
-	query := `DELETE FROM items WHERE id=$1`
-
-	_, err := pg.db.Master.ExecContext(ctx, `SELECT set_config('myapp.current_user_id', $1, false)`, userID)
+func (pg *Postgres) DeleteItem(ctx context.Context, itemID int64) error {
+	tx, err := pg.db.Master.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	res, err := pg.db.Master.ExecContext(ctx, query, itemID)
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	query := `DELETE FROM items WHERE id=$1`
+
+	res, err := tx.ExecContext(ctx, query, itemID)
 	if err != nil {
 		return err
 	}
@@ -147,6 +169,9 @@ func (pg *Postgres) DeleteItem(ctx context.Context, itemID int64, userID int64) 
 
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
+	}
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	return nil
 }

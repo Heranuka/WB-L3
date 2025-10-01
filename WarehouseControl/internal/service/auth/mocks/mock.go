@@ -7,6 +7,7 @@ package mock_auth
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	domain "wb-l3.7/internal/domain"
@@ -104,7 +105,7 @@ func (mr *MockTokensStorageMockRecorder) GetUserByRefreshToken(ctx, refreshToken
 }
 
 // StoreRefreshToken mocks base method.
-func (m *MockTokensStorage) StoreRefreshToken(ctx context.Context, userID int64, refreshToken, expiresAt string) error {
+func (m *MockTokensStorage) StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt time.Time) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StoreRefreshToken", ctx, userID, refreshToken, expiresAt)
 	ret0, _ := ret[0].(error)

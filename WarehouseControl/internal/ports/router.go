@@ -11,6 +11,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/wb-go/wbf/ginext"
 	"wb-l3.7/internal/config"
+
 	"wb-l3.7/internal/ports/rest/auth"
 	"wb-l3.7/internal/ports/rest/items"
 	"wb-l3.7/internal/ports/rest/renderer"

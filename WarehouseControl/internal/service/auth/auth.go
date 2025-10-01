@@ -18,7 +18,7 @@ type UserStorage interface {
 }
 
 type TokensStorage interface {
-	StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt string) error
+	StoreRefreshToken(ctx context.Context, userID int64, refreshToken string, expiresAt time.Time) error
 	GetUserByRefreshToken(ctx context.Context, refreshToken string) (*domain.User, error)
 }
 
@@ -88,6 +88,7 @@ func (a *Auth) Login(ctx context.Context, nickname, password string) (*domain.To
 	if err != nil {
 		return nil, nil, fmt.Errorf("service.Auth.Login.CreateSession: %w", err)
 	}
+
 	return tokens, user, nil
 }
 
@@ -96,12 +97,12 @@ func (a *Auth) GenerateTokens(ctx context.Context, user *domain.User) (*domain.T
 	if err != nil {
 		return nil, fmt.Errorf("service.Auth.CreateSession.accessToken: %w", err)
 	}
-	// ... остальной код без изменений ...
 	refreshToken, err := a.tokenManager.NewRefreshToken()
 	if err != nil {
 		return nil, fmt.Errorf("service.Auth.CreateSession.refreshToken: %w", err)
 	}
-	expiresAt := time.Now().Add(a.refreshTokenTTL).Format(time.RFC3339)
+	expiresAt := time.Now().Add(a.refreshTokenTTL)
+
 	err = a.token.StoreRefreshToken(ctx, user.ID, refreshToken, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("service.Auth.CreateSession.storeRefreshToken: %w", err)
@@ -110,6 +111,8 @@ func (a *Auth) GenerateTokens(ctx context.Context, user *domain.User) (*domain.T
 	tokens := &domain.Tokens{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		CreatedAt:    time.Now(),
+		ExpiresAt:    expiresAt,
 	}
 	return tokens, nil
 }

@@ -29,6 +29,13 @@ type tokenResponse struct {
 	Roles        []jwt.Role `json:"roles"`
 }
 
+type tokenResponseRefresh struct {
+	AccessToken  string    `json:"token"`
+	RefreshToken string    `json:"refresh_token"`
+	CreateAt     time.Time `json:"created_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
 // Запрос обновления токена
 type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`

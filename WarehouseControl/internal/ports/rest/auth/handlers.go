@@ -253,7 +253,17 @@ func NewHandler(logger zerolog.Logger, authService ServiceAuth) *Handler {
 	}
 }
 
-// Register godoc
+// Register регистрирует нового пользователя
+// @Summary Регистрация пользователя
+// @Description Регистрация нового пользователя по никнейму и паролю
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param input body domain.User true "Данные пользователя"
+// @Success 200 {string} string "Успешная регистрация"
+// @Failure 400 {string} string "Некорректные данные"
+// @Failure 500 {string} string "Ошибка сервиса"
+// @Router /auth/register [post]
 func (h *Handler) Register(c *ginext.Context) {
 	var register registerRequest
 
@@ -290,7 +300,17 @@ func (h *Handler) Register(c *ginext.Context) {
 	c.JSON(http.StatusOK, ginext.H{"Success": "success"})
 }
 
-// Login godoc
+// Login авторизует пользователя и возвращает токены
+// @Summary Вход в систему
+// @Description Авторизация пользователя по никнейму и паролю, получение JWT токенов
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param input body domain.User true "Данные для входа: никнейм и пароль"
+// @Success 200 {object} domain.Tokens
+// @Failure 401 {string} string "Неверные учетные данные"
+// @Failure 500 {string} string "Ошибка сервиса"
+// @Router /auth/login [post]
 func (h *Handler) Login(c *ginext.Context) {
 	var logReq loginRequest
 
@@ -343,11 +363,21 @@ func (h *Handler) Login(c *ginext.Context) {
 	c.JSON(http.StatusOK, tokenResp)
 }
 
-// RefreshToken godoc
+// Refresh обновляет токены по refresh токену
+// @Summary Обновление токенов
+// @Description Обновляет JWT и refresh токены по действующему refresh токену
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param token body string true "Refresh токен"
+// @Success 200 {object} domain.Tokens
+// @Failure 401 {string} string "Некорректный refresh токен"
+// @Failure 500 {string} string "Ошибка при обновлении токенов"
+// @Router /auth/refresh [post]
 func (h *Handler) RefreshToken(c *ginext.Context) {
 	var refresh refreshRequest
 
-	if err := c.Bind(&refresh); err != nil {
+	if err := c.ShouldBindJSON(&refresh); err != nil { // Используем ShouldBindJSON
 		h.logger.Warn().Err(err).Msg("Failed to bind refresh token request")
 		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
@@ -371,9 +401,11 @@ func (h *Handler) RefreshToken(c *ginext.Context) {
 		return
 	}
 
-	tokenResp := tokenResponse{
+	tokenResp := tokenResponseRefresh{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
+		CreateAt:     tokens.CreatedAt,
+		ExpiresAt:    tokens.ExpiresAt,
 	}
 
 	h.logger.Info().Msg("Tokens refreshed successfully")

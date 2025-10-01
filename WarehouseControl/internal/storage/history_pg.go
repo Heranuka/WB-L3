@@ -2,8 +2,8 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"wb-l3.7/internal/domain"
@@ -35,13 +35,13 @@ func (pg *Postgres) LogChange(ctx context.Context, userID, itemID int64, changeD
 }
 
 func (pg *Postgres) GetItemHistory(ctx context.Context, itemID int64) ([]*domain.ItemHistoryRecord, error) {
-	query := `
+	const query = `
         SELECT id, item_id, changed_by_user_id, change_description, changed_at, version, change_diff
         FROM item_history
         WHERE item_id = $1
-        ORDER BY changed_at DESC
+        ORDER BY version DESC
     `
-	rows, err := pg.db.Master.QueryContext(ctx, query, itemID)
+	rows, err := pg.db.QueryContext(ctx, query, itemID)
 	if err != nil {
 		return nil, err
 	}
@@ -49,27 +49,35 @@ func (pg *Postgres) GetItemHistory(ctx context.Context, itemID int64) ([]*domain
 
 	var history []*domain.ItemHistoryRecord
 	for rows.Next() {
-		entry := &domain.ItemHistoryRecord{}
-		var changedByUserID string
+		var entry domain.ItemHistoryRecord
 		var changeDiffJSON []byte
 
-		// Сканируем все поля, включая JSON поля в []byte
-		err := rows.Scan(&entry.ID, &entry.ItemID, &changedByUserID, &entry.ChangeDescription, &entry.ChangedAt, &entry.Version, &changeDiffJSON)
+		err = rows.Scan(&entry.ID, &entry.ItemID, &entry.ChangedByUser, &entry.ChangeDescription, &entry.ChangedAt, &entry.Version, &changeDiffJSON)
 		if err != nil {
 			return nil, err
 		}
 
-		// Распарсим JSON change_diff в map[string]ChangeDiff
-		err = json.Unmarshal(changeDiffJSON, &entry.ChangeDiff)
-		if err != nil && err != sql.ErrNoRows {
-			return nil, err
+		// Для отладки: распечатать исходный JSON change_diff
+		var raw map[string]interface{}
+		if err := json.Unmarshal(changeDiffJSON, &raw); err != nil {
+			fmt.Printf("Failed to unmarshal change_diff raw JSON: %v\n", err)
+		} else {
+			fmt.Printf("Raw change_diff: %+v\n", raw)
 		}
 
-		// Преобразование или поиск пользователя по changedByUserID можно сделать здесь,
-		// пока просто сохраняем как строку в ChangedByUser для фронтенда
-		entry.ChangedByUser = changedByUserID
+		// Здесь можно попробовать распарсить в map[string]ChangeDiff
+		var changeDiff map[string]domain.ChangeDiff
+		err = json.Unmarshal(changeDiffJSON, &changeDiff)
+		if err != nil {
+			fmt.Printf("Error unmarshaling to ChangeDiff map: %v\n", err)
+		}
+		entry.ChangeDiff = changeDiff
 
-		history = append(history, entry)
+		history = append(history, &entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return history, nil
 }
