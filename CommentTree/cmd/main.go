@@ -1,46 +1,72 @@
 package main
 
 import (
+	//_ "commentTree/docs"
 	"commentTree/internal/components"
 	"commentTree/internal/config"
 	"context"
 	"log"
 	"os"
-	"sync"
+	"os/signal"
+	"syscall"
+
+	"github.com/wb-go/wbf/zlog"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
+		log.Println(err.Error())
 		os.Exit(1)
 	}
 
-	wg := &sync.WaitGroup{}
+	// Инициализация глобального логгера zlog
+	zlog.Init()
 
-	logger := components.SetupLogger()
+	// Берём глобальный логгер
+	logger := zlog.Logger
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	appCtx, cancel := context.WithCancel(context.Background())
+	eg, erctx := errgroup.WithContext(appCtx)
 
-	components, err := components.InitComponents(ctx, logger, cfg)
+	components, err := components.InitComponents(erctx, logger, cfg)
 	if err != nil {
-		log.Fatal("failed to init components")
+		logger.Error().Err(err).Msg("Could not init components")
+		os.Exit(1)
 	}
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		if err := components.HttpServer.Run(ctx); err != nil {
-			logger.Error("Failed to init components", "error", err.Error())
+	eg.Go(func() error {
+		if err := components.HttpServer.Run(erctx); err != nil {
+			logger.Error().Err(err).Msg("The http Server failed")
+			return err
 		}
-	}()
+		logger.Info().Msg("Http Server stopped")
+		return nil
+	})
 
-	wg.Wait()
+	quitChan := make(chan os.Signal, 1)
+	signal.Notify(quitChan, os.Interrupt, syscall.SIGTERM)
+	sig := <-quitChan
 
-	if err := components.StopComponents(); err != nil {
-		log.Println("failed to stop components")
+	cancel()
+
+	logger.Info().Str("signal", sig.String()).Msg("Captured signal, initiating shutdown")
+
+	if err = eg.Wait(); err != nil {
+		logger.Error().Err(err).Msg("Application finished with error")
+		if shutdownErr := components.StopComponents(); shutdownErr != nil {
+			logger.Error().Err(shutdownErr).Msg("Error during component shutdown after errgroup error")
+		}
+		os.Exit(1)
+	} else {
+		logger.Info().Msg("Shutting down the services...")
+		if shutdownErr := components.StopComponents(); shutdownErr != nil {
+			logger.Error().Err(shutdownErr).Msg("could not properly stop manager server")
+			os.Exit(1)
+		}
 	}
 
-	logger.Info("The programm exited!")
+	logger.Info().Msg("All components stopped. Giving system a moment to flush logs...")
+	logger.Info().Msg("Gracefully shutting down the servers")
 }

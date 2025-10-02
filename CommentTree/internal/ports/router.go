@@ -2,56 +2,72 @@ package ports
 
 import (
 	"commentTree/internal/config"
-	rest "commentTree/internal/ports/rest/comments"
+	"commentTree/internal/ports/rest/comments"
 	render_handler "commentTree/internal/ports/rest/render"
-	"commentTree/internal/service"
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
+	"github.com/wb-go/wbf/ginext"
 )
 
 type Server struct {
-	log    *slog.Logger
+	logger zerolog.Logger
 	server *http.Server
 	cfg    *config.Config
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, cfg *config.Config, service service.Service, render service.Render) *Server {
+func NewServer(ctx context.Context, logger zerolog.Logger, cfg *config.Config, service comments.CommentHandler, render render_handler.HandlerRender) *Server {
+	httpHandler := comments.NewHandler(logger, cfg, service)
+	rendandler := render_handler.NewHandler(logger, render)
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%s", cfg.Http.Port),
-		Handler: InitRouter(ctx, logger, service, render),
+		Addr:         fmt.Sprintf(":%s", cfg.Http.Port),
+		Handler:      InitRouter(ctx, logger, httpHandler, rendandler),
+		ReadTimeout:  cfg.Http.ReadTimeout,
+		WriteTimeout: cfg.Http.WriteTimeout,
 	}
 	return &Server{
-		log:    logger,
+		logger: logger,
 		server: server,
 		cfg:    cfg,
 	}
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	errResult := make(chan error, 1)
+	errChan := make(chan error)
+
+	s.logger.Info().Str("addr", s.server.Addr).Msg("Starting HTTP server")
+
 	go func() {
-		s.log.Info("Starting listening:", slog.String("port", s.cfg.Http.Port))
-		if err := s.server.ListenAndServe(); err != nil {
-			errResult <- err
+		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			s.logger.Error().Err(err).Msg("HTTP server failed")
+			errChan <- err
+		} else {
+			s.logger.Info().Msg("HTTP server stopped")
+			errChan <- nil
 		}
 	}()
 
 	select {
 	case <-ctx.Done():
-		if err := s.Stop(); err != nil {
-			errResult <- err
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.cfg.Http.ShutdownTimeout)
+		defer cancel()
+
+		s.logger.Info().Msg("Context done, initiating server shutdown")
+
+		if err := s.server.Shutdown(shutdownCtx); err != nil {
+			s.logger.Error().Err(err).Msg("HTTP server shutdown failed")
+		} else {
+			s.logger.Info().Msg("HTTP server shutdown completed")
 		}
-	case err := <-errResult:
+		return ctx.Err()
+
+	case err := <-errChan:
 		return err
 	}
-
-	return nil
 }
 
 func (s *Server) Stop() error {
@@ -65,23 +81,25 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-func InitRouter(ctx context.Context, log *slog.Logger, service service.Service, render service.Render) *gin.Engine {
-	h := rest.NewHandler(log, &service)
-	ren := render_handler.NewHandler(log, &render)
+func InitRouter(ctx context.Context, log zerolog.Logger, h *comments.Handler, ren *render_handler.Handler) *ginext.Engine {
+	r := ginext.New()
 
-	r := gin.Default()
-
-	r.LoadHTMLGlob("templates/*.html")
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:8080"}
 	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
 	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
 	config.AllowCredentials = true
-
 	r.Use(cors.New(config))
+
+	// Логгер и Recovery
+	r.Use(ginext.Logger())
+	r.Use(ginext.Recovery())
+
+	// Маршруты
 	r.GET("/home", ren.HomeHandler)
 	r.POST("/comments", h.CreateHandler)
-	r.GET("/comments/:id", h.GetByIdHandler)
+	r.GET("/comments", h.GetRootCommentsHandler)                      // корневые комментарии с пагинацией
+	r.GET("/comments/:parent_id/children", h.GetChildCommentsHandler) // дочерние по parentId
 	r.DELETE("/comments/:id", h.DeleteHandler)
 
 	return r

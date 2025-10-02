@@ -3,8 +3,9 @@ package service
 import (
 	"fmt"
 	"html/template"
-	"log/slog"
 	"net/http"
+
+	"github.com/rs/zerolog"
 )
 
 type ServiceRender interface {
@@ -13,21 +14,20 @@ type ServiceRender interface {
 type Render struct {
 	homeTemplate  *template.Template
 	serviceRender ServiceRender
-	logger        *slog.Logger
+	logger        zerolog.Logger
 }
 
-func NewRender(templatePath string, serviceSender ServiceRender, logger *slog.Logger) *Render {
+func NewRender(templatePath string, logger zerolog.Logger) *Render {
 	return &Render{
-		homeTemplate:  template.Must(template.ParseFiles(fmt.Sprintf("%s/%s", templatePath, "home.html"))),
-		serviceRender: serviceSender,
-		logger:        logger,
+		homeTemplate: template.Must(template.ParseFiles(fmt.Sprintf("%s/%s", templatePath, "home.html"))),
+		logger:       logger,
 	}
 }
 
 func (r *Render) Home(w http.ResponseWriter) {
 	err := r.homeTemplate.Execute(w, nil)
 	if err != nil {
-		r.logger.Error("can not execute home page", slog.String("error", err.Error()))
+		r.logger.Error().Err(err).Msg("can not execute home page")
 	}
 
 }

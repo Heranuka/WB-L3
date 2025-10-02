@@ -1,39 +1,72 @@
 package pg
 
 import (
+	"commentTree/internal/config"
 	"context"
-	"fmt"
-	"log/slog"
-	"os"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"fmt"
+
+	"github.com/wb-go/wbf/dbpg"
 )
 
 type Postgres struct {
-	log  *slog.Logger
-	pool *pgxpool.Pool
+	db *dbpg.DB
 }
 
-func NewPostgres(ctx context.Context, log *slog.Logger) (*Postgres, error) {
-	config, err := pgxpool.ParseConfig(os.Getenv("DB_URL"))
+func NewPostgres(ctx context.Context, cfg *config.Config) (*Postgres, error) {
+	masterDSN := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Postgres.Master.Host,
+		cfg.Postgres.Master.Port,
+		cfg.Postgres.Master.User,
+		cfg.Postgres.Master.Password,
+		cfg.Postgres.Master.Database,
+		cfg.Postgres.Master.SSLMode,
+	)
+
+	slaveDSNs := make([]string, 0, len(cfg.Postgres.Slaves))
+	for _, slave := range cfg.Postgres.Slaves {
+		dsn := fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			slave.Host,
+			slave.Port,
+			slave.User,
+			slave.Password,
+			slave.Database,
+			slave.SSLMode,
+		)
+		slaveDSNs = append(slaveDSNs, dsn)
+	}
+
+	db, err := dbpg.New(masterDSN, slaveDSNs, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping Postgres: %w", err)
-	}
 	return &Postgres{
-		log:  log,
-		pool: pool,
+		db: db,
 	}, nil
 }
 
-func (s *Postgres) Stop() {
-	s.pool.Close()
+func (db *Postgres) Close() error {
+	var err error
+	if db.db.Master != nil {
+		e := db.db.Master.Close()
+		if e != nil {
+			err = fmt.Errorf("error closing master db: %w", e)
+		}
+	}
+	for _, slave := range db.db.Slaves {
+		if slave != nil {
+			e := slave.Close()
+			if e != nil {
+				if err == nil {
+					err = fmt.Errorf("error closing slave db: %w", e)
+				} else {
+					err = fmt.Errorf("%v; error closing slave db: %w", err, e)
+				}
+			}
+		}
+	}
+	return err
 }

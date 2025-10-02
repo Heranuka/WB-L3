@@ -7,18 +7,12 @@ import (
 	"net/http"
 
 	"commentTree/internal/storage/pg"
-	slogpretty "commentTree/pkg/logger"
 	"context"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
-)
 
-const (
-	envLocal = "local"
-	envDev   = "dev"
-	envProd  = "prod"
+	"github.com/rs/zerolog"
 )
 
 type Components struct {
@@ -32,12 +26,13 @@ func (d *DummyRenderService) Home(w http.ResponseWriter) {
 	w.Write([]byte("Hello Home Page"))
 }
 
-func InitComponents(ctx context.Context, logger *slog.Logger, cfg *config.Config) (*Components, error) {
-	pg, err := pg.NewPostgres(ctx, logger)
+func InitComponents(ctx context.Context, logger zerolog.Logger, cfg *config.Config) (*Components, error) {
+	pg, err := pg.NewPostgres(ctx, cfg)
 	if err != nil {
-		logger.Error("Failed to init Postgres", slog.String("error", err.Error()))
-		return nil, err
+		logger.Error().Err(err).Msg("Postgres initialization failed")
+		return nil, fmt.Errorf("components.init.InitComponents.postgres failed: %w", err)
 	}
+	logger.Info().Msg("Postgres service initialized")
 
 	services := service.NewService(logger, pg)
 	cwd, err := os.Getwd()
@@ -46,10 +41,11 @@ func InitComponents(ctx context.Context, logger *slog.Logger, cfg *config.Config
 		return nil, err
 	}
 	fmt.Println("Current work directory:", cwd)
-	dummyService := &DummyRenderService{}
-	render := service.NewRender(cwd, dummyService, logger)
 
-	server := ports.NewServer(ctx, logger, cfg, *services, *render)
+	renderService := service.NewRender(cwd+"/templates", logger)
+	logger.Info().Msg("Render service initialized")
+
+	server := ports.NewServer(ctx, logger, cfg, services, renderService)
 	return &Components{
 		HttpServer: server,
 		pg:         pg,
@@ -61,30 +57,9 @@ func (c *Components) StopComponents() error {
 		return err
 	}
 
-	c.pg.Stop()
-
-	return nil
-}
-
-func SetupLogger() *slog.Logger {
-	var logger *slog.Logger
-	var env = "local"
-	switch env {
-	case envLocal:
-		logger = slogpretty.SetupPrettySlog()
-	case envDev:
-		logger = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-		)
-	case envProd:
-		logger = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
-		)
-	default:
-
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-		// Теперь, если env неизвестен, мы вернем этот дефолтный логгер.
+	if err := c.pg.Close(); err != nil {
+		return err
 	}
 
-	return logger
+	return nil
 }

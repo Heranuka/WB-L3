@@ -1,10 +1,10 @@
 package render_handler
 
 import (
-	"log/slog"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
+	"github.com/wb-go/wbf/ginext"
 )
 
 type HandlerRender interface {
@@ -12,17 +12,17 @@ type HandlerRender interface {
 }
 
 type Handler struct {
-	logger        *slog.Logger
+	logger        zerolog.Logger
 	handlerRender HandlerRender
 }
 
-func NewHandler(logger *slog.Logger, handlerRender HandlerRender) *Handler {
+func NewHandler(logger zerolog.Logger, handlerRender HandlerRender) *Handler {
 	return &Handler{
 		logger:        logger,
 		handlerRender: handlerRender,
 	}
 }
 
-func (h *Handler) HomeHandler(c *gin.Context) {
+func (h *Handler) HomeHandler(c *ginext.Context) {
 	h.handlerRender.Home(c.Writer)
 }

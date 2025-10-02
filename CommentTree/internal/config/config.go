@@ -1,8 +1,9 @@
 package config
 
 import (
-	"fmt"
+	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -11,63 +12,93 @@ import (
 type Config struct {
 	Env        string `env:"ENV"`
 	Http       HttpConfig
-	AuthConfig AuthConfig
-	Postgres   PostgresConfig
+	Redis      RedisConfig
+	Postgres   DBConfig
+	Pagination PaginationConfig
 }
 
 type HttpConfig struct {
-	Port            string        `env:"PORT"`
-	ReadTimeout     time.Duration `yaml:"read_timeout" env-default:"10s"`
-	WriteTimeout    time.Duration `yaml:"write_timeout" env-default:"10s"`
-	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"10s"`
+	Port            string        `env:"HTTP_PORT"`
+	ReadTimeout     time.Duration `env:"HTTP_READ_TIMEOUT"`
+	WriteTimeout    time.Duration `env:"HTTP_WRITE_TIMEOUT"`
+	ShutdownTimeout time.Duration `env:"HTTP_SHUTDOWN_TIMEOUT"`
 }
 
-type AuthConfig struct {
-	AccessTokenTTL  time.Duration `env:"ACCESS_TTL" env-default:"15m"`
-	RefreshTokenTTL time.Duration `env:"REFRESH_TTL" env-default:"720h"`
-	PasswordSalt    string        `env:"PASSWORD_SALT" env-required:"true"`
-	JWTSigningKey   string        `env:"JWT_SIGNING_KEY" env-required:"true"`
-}
 type PostgresConfig struct {
 	Host     string `env:"POSTGRES_HOST"`
-	Port     string `env:"POSTGRES_PORT"`
+	Port     int    `env:"POSTGRES_PORT"`
 	Database string `env:"POSTGRES_DATABASE"`
 	User     string `env:"POSTGRES_USER"`
 	Password string `env:"POSTGRES_PASSWORD"`
 	SSLMode  string `env:"POSTGRES_SSL_MODE"`
 }
 
+type RedisConfig struct {
+	Addr     string `env:"REDIS_ADDR"`
+	Password string `env:"REDIS_PASSWORD"`
+	DBRedis  int    `env:"REDIS_DBREDIS"`
+}
+
+type PaginationConfig struct {
+	Limit   int  `env:"PAGINATION_LIMIT"`
+	Offset  int  `env:"PAGINATION_OFFSET"`
+	SortAsk bool `env:"PAGINATION_SORT_ASK"`
+}
+
+type DBConfig struct {
+	Master PostgresConfig
+	Slaves []PostgresConfig
+
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
+
 func LoadConfig() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
-		return nil, fmt.Errorf("error loading .env file")
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env file not found, continuing with system environment variables")
 	}
 
-	var cfg Config
+	cfg := Config{}
 
-	cfg.Postgres.Host = os.Getenv("POSTGRES_HOST")
-	cfg.Postgres.Password = os.Getenv("POSTGRES_PASSWORD")
-	cfg.Postgres.Database = os.Getenv("POSTGRES_DATABASE")
-	cfg.Postgres.SSLMode = os.Getenv("POSTGRES_SSL_MODE")
-	cfg.Postgres.Port = os.Getenv("POSTGRES_PORT")
-	cfg.Postgres.User = os.Getenv("POSTGRES_USER")
-	cfg.Http.Port = os.Getenv("PORT")
-	cfg.AuthConfig.PasswordSalt = os.Getenv("PASSWORD_SALT")
-	cfg.AuthConfig.JWTSigningKey = os.Getenv("JWT_SIGNING_KEY")
-	accessTTLStr := os.Getenv("ACCESS_TTL")
-	refreshTTLStr := os.Getenv("REFRESH_TTL")
+	cfg.Env = os.Getenv("ENV")
+	cfg.Http.Port = os.Getenv("HTTP_PORT")
 
-	accessTTL, err := time.ParseDuration(accessTTLStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid ACCESS_TTL: %w", err)
+	readTimeout := os.Getenv("HTTP_READ_TIMEOUT")
+	if readTimeout == "" {
+		readTimeout = "10s"
 	}
-	refreshTTL, err := time.ParseDuration(refreshTTLStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid REFRESH_TTL: %w", err)
-	}
+	cfg.Http.ReadTimeout, _ = time.ParseDuration(readTimeout)
 
-	cfg.AuthConfig.AccessTokenTTL = accessTTL
-	cfg.AuthConfig.RefreshTokenTTL = refreshTTL
+	writeTimeout := os.Getenv("HTTP_WRITE_TIMEOUT")
+	if writeTimeout == "" {
+		writeTimeout = "10s"
+	}
+	cfg.Http.WriteTimeout, _ = time.ParseDuration(writeTimeout)
+
+	shutdownTimeout := os.Getenv("HTTP_SHUTDOWN_TIMEOUT")
+	if shutdownTimeout == "" {
+		shutdownTimeout = "10s"
+	}
+	cfg.Http.ShutdownTimeout, _ = time.ParseDuration(shutdownTimeout)
+
+	cfg.Postgres.Master.Host = os.Getenv("POSTGRES_HOST")
+	cfg.Postgres.Master.Port, _ = strconv.Atoi(os.Getenv("POSTGRES_PORT"))
+	cfg.Postgres.Master.Database = os.Getenv("POSTGRES_DATABASE")
+	cfg.Postgres.Master.User = os.Getenv("POSTGRES_USER")
+	cfg.Postgres.Master.Password = os.Getenv("POSTGRES_PASSWORD")
+	cfg.Postgres.Master.SSLMode = os.Getenv("POSTGRES_SSL_MODE")
+
+	cfg.Pagination.Limit, _ = strconv.Atoi(os.Getenv("PAGINATION_LIMIT"))
+	cfg.Pagination.Offset, _ = strconv.Atoi(os.Getenv("PAGINATION_OFFSET"))
+	cfg.Pagination.SortAsk, _ = strconv.ParseBool(os.Getenv("PAGINATION_SORT_ASK"))
+
+	cfg.Redis.Addr = os.Getenv("REDIS_ADDR")
+
+	cfg.Redis.Password = os.Getenv("REDIS_PASSWORD")
+	cfg.Redis.DBRedis, _ = strconv.Atoi(os.Getenv("REDIS_DBREDIS"))
+
+	log.Printf("Config loaded: %+v\n", cfg)
 
 	return &cfg, nil
 }

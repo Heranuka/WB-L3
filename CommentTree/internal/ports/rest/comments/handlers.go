@@ -1,76 +1,127 @@
-package rest
+package comments
 
 import (
+	"commentTree/internal/config"
 	"commentTree/internal/domain"
+	"commentTree/pkg/e"
 	"context"
-	"log/slog"
+	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
+	"github.com/wb-go/wbf/ginext"
 )
 
+//go:generate mockgen -source=handlers.go -destination=mocks/mock.go
 type CommentHandler interface {
 	Create(ctx context.Context, comment *domain.Comment) (int, error)
-	GetById(ctx context.Context, id int) (*domain.Comment, error)
 	Delete(ctx context.Context, id int) error
+	GetRootComments(ctx context.Context, search *string, limit, offset int) ([]*domain.Comment, error)
+	GetChildComments(ctx context.Context, parentID int) ([]*domain.Comment, error)
 }
 
 type Handler struct {
-	logger         *slog.Logger
+	logger         zerolog.Logger
+	cfg            *config.Config
 	commentHandler CommentHandler
 }
 
-func NewHandler(logger *slog.Logger, commentHandler CommentHandler) *Handler {
+func NewHandler(logger zerolog.Logger, config *config.Config, commentHandler CommentHandler) *Handler {
 	return &Handler{
 		logger:         logger,
+		cfg:            config,
 		commentHandler: commentHandler,
 	}
 }
+func (h *Handler) CreateHandler(c *ginext.Context) {
+	var newComment commentCreate
 
-func (h *Handler) CreateHandler(c *gin.Context) {
-	var comment *domain.Comment
-
-	if err := c.Bind(&comment); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBindJSON(&newComment); err != nil {
+		h.logger.Error().Err(err).Msg("CreateHandler: failed to bind JSON")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
-	id, err := h.commentHandler.Create(c, comment)
+
+	comment := &domain.Comment{
+		Content:  newComment.Content,
+		ParentID: newComment.ParentID,
+	}
+
+	id, err := h.commentHandler.Create(c.Request.Context(), comment)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.logger.Error().Err(err).Msg("CreateHandler: failed to create comment")
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"Comment Created": id})
+	c.JSON(http.StatusCreated, ginext.H{"Comment Created": id})
 }
 
-func (h *Handler) GetByIdHandler(c *gin.Context) {
+func (h *Handler) DeleteHandler(c *ginext.Context) {
 	idstr := c.Param("id")
 	id, err := strconv.Atoi(idstr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.logger.Error().Err(err).Msg("DeleteHandler: invalid id param")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": "invalid id"})
 		return
 	}
-	comment, err := h.commentHandler.GetById(c, id)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := h.commentHandler.Delete(c.Request.Context(), id); err != nil {
+		if errors.Is(err, e.ErrNotFound) {
+			h.logger.Warn().Msgf("DeleteHandler: comment id %d not found", id)
+			c.JSON(http.StatusNotFound, e.ErrNotFound)
+			return
+		}
+		h.logger.Error().Err(err).Msgf("DeleteHandler: failed to delete comment id %d", id)
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, comment)
+	c.JSON(http.StatusNoContent, "deleted successfully")
 }
 
-func (h *Handler) DeleteHandler(c *gin.Context) {
-	idstr := c.Param("id")
-	id, err := strconv.Atoi(idstr)
+func (h *Handler) GetRootCommentsHandler(c *ginext.Context) {
+	limitStr := c.DefaultQuery("limit", "10")
+	offsetStr := c.DefaultQuery("offset", "0")
+	search := c.Query("search")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 10
+	}
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	comments, err := h.commentHandler.GetRootComments(c.Request.Context(), &search, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.logger.Error().Err(err).Msg("GetRootCommentsHandler: failed to get root comments")
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
 		return
 	}
-	if err := h.commentHandler.Delete(c, id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	c.JSON(http.StatusOK, comments)
+}
+
+func (h *Handler) GetChildCommentsHandler(c *ginext.Context) {
+	parentIDStr := c.Param("parent_id")
+	parentID, err := strconv.Atoi(parentIDStr)
+	if err != nil {
+		if errors.Is(err, e.ErrNotFound) {
+			h.logger.Warn().Msgf("GetChildCommentsHandler: invalid parent ID %s not found", parentIDStr)
+			c.JSON(http.StatusNotFound, e.ErrNotFound)
+			return
+		}
+		h.logger.Error().Err(err).Msg("GetChildCommentsHandler: invalid parent ID")
+		c.JSON(http.StatusBadRequest, ginext.H{"error": "invalid parent ID"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"Successfully deleted": id})
+	comments, err := h.commentHandler.GetChildComments(c.Request.Context(), parentID)
+	if err != nil {
+		h.logger.Error().Err(err).Msgf("GetChildCommentsHandler: failed to get children for parent ID %d", parentID)
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, comments)
 }
