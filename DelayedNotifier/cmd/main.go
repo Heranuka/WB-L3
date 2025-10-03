@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	cfg, err := config.LoadConfig()
+	cfg, err := config.LoadConfig(".env")
 	if err != nil {
 		log.Println(err.Error())
 		os.Exit(1)

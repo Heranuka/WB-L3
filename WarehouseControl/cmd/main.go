@@ -86,7 +86,6 @@ func main() {
 	}
 
 	logger.Info().Msg("All components stopped gracefully. Flushing logs...")
-	// Можно добавить небольшую паузу, если нужно
 
 	logger.Info().Msg("Graceful shutdown complete")
 }
