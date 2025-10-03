@@ -21,14 +21,7 @@ func (s *Postgres) Create(ctx context.Context, comm *domain.Comment) (int, error
 }
 
 func (s *Postgres) Delete(ctx context.Context, id int) error {
-	query := `
-        WITH RECURSIVE to_delete AS (
-            SELECT id FROM comments WHERE id = $1
-            UNION ALL
-            SELECT c.id FROM comments c JOIN to_delete td ON c.parent_id = td.id
-        )
-        DELETE FROM comments WHERE id IN (SELECT id FROM to_delete);
-    `
+	query := `DELETE FROM comments WHERE id = $1`
 	row, err := s.db.Master.ExecContext(ctx, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -107,4 +100,54 @@ func (s *Postgres) GetChildComments(ctx context.Context, parentID int) ([]*domai
 		comments = append(comments, &c)
 	}
 	return comments, nil
+}
+
+func (s *Postgres) GetAllComments(ctx context.Context) ([]domain.CommentNode, error) {
+	query := `
+        SELECT id, content, parent_id, created_at, updated_at
+        FROM comments
+        ORDER BY created_at DESC
+    `
+
+	rows, err := s.db.Master.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var comments []domain.Comment
+	for rows.Next() {
+		var c domain.Comment
+		if err := rows.Scan(&c.ID, &c.Content, &c.ParentID, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, err
+		}
+		comments = append(comments, c)
+	}
+
+	// Build tree
+	nodeMap := make(map[int]*domain.CommentNode)
+	var roots []domain.CommentNode
+
+	for _, comment := range comments {
+		node := domain.CommentNode{
+			Comment:  comment,
+			Children: []domain.CommentNode{},
+		}
+		nodeMap[comment.ID] = &node
+	}
+
+	for _, node := range nodeMap {
+		if node.Comment.ParentID == nil {
+			roots = append(roots, *node)
+		} else {
+			parentNode, ok := nodeMap[*node.Comment.ParentID]
+			if ok {
+				parentNode.Children = append(parentNode.Children, *node)
+			} else {
+				roots = append(roots, *node) // parent missing, treat as root
+			}
+		}
+	}
+
+	return roots, nil
 }

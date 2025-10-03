@@ -93,3 +93,16 @@ func (mr *MockCommentServiceMockRecorder) GetRootComments(ctx, search, limit, of
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRootComments", reflect.TypeOf((*MockCommentService)(nil).GetRootComments), ctx, search, limit, offset)
 }
+
+func (m *MockCommentService) GetAllComments(ctx context.Context) ([]domain.CommentNode, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllComments", ctx)
+	ret0, _ := ret[0].([]domain.CommentNode)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (mr *MockCommentServiceMockRecorder) GetAllComments(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllComments", reflect.TypeOf((*MockCommentService)(nil).GetAllComments), ctx)
+}

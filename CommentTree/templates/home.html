@@ -1,144 +1,42 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Комментарии с поиском и пагинацией</title>
+<title>Comments with Search and Pagination</title>
 <style>
-body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; background: #f9f9f9; }
-h1 { text-align: center; }
-.search-container {
-  display: flex; margin-bottom: 1rem; justify-content: center; gap: 10px;
-}
-#searchBox {
-  flex-grow: 1;
-  padding: 0.5em 1em;
-  border: 2px solid #007bff;
-  border-radius: 4px 0 0 4px;
-  font-size: 1rem;
-  outline: none;
-}
-#searchBtn {
-  padding: 0.5em 1.5em;
-  border: 2px solid #007bff;
-  background: #007bff;
-  color: white;
-  font-weight: 600;
-  border-radius: 0 4px 4px 0;
-  cursor: pointer;
-}
-#searchBtn:hover {
-  background: #0056b3;
-}
-ul { list-style-type: none; padding-left: 0; }
-li.comment {
-  background: white;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-  position: relative;
-}
-li.comment > .content {
-  margin-bottom: 10px;
-}
-li.comment .actions {
-  position: absolute; right: 16px; top: 16px;
-}
-li.comment .children {
-  margin-left: 20px;
-  border-left: 3px solid #ddd;
-  padding-left: 12px;
-  margin-top: 10px;
-}
-button.load-replies-btn {
-  margin-top: 5px;
-  font-size: 0.9rem;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 5px 10px;
-  cursor: pointer;
-}
-button.load-replies-btn:hover {
-  background-color: #0056b3;
-}
-#loadMoreBtn {
-  display: block;
-  margin: 20px auto;
-  padding: 10px 18px;
-  font-size: 1.1rem;
-  cursor: pointer;
-  border-radius: 6px;
-  border: none;
-  background-color: #28a745;
-  color: white;
-}
-#loadMoreBtn:hover {
-  background-color: #1e7e34;
-}
-#errorMessage {
-  color: red;
-  margin-top: 0.5rem;
-  min-height: 1.2em;
-  text-align: center;
-}
-form#newCommentForm textarea {
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  font-size: 1rem;
-  padding: 12px;
-  resize: vertical;
-  width: 100%;
-}
-form#newCommentForm button {
-  background-color: #17a2b8;
-  border: none;
-  border-radius: 6px;
-  padding: 10px 20px;
-  color: white;
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 10px;
-}
-form#newCommentForm button:hover {
-  background-color: #117a8b;
-}
-#cancelReplyBtn {
-  background-color: #dc3545;
-  margin-left: 10px;
-}
-#cancelReplyBtn:hover {
-  background-color: #a71d2a;
-}
+  /* Ваши стили, сохраните как есть или добавьте по необходимости */
 </style>
 </head>
 <body>
 
-<h1>Комментарии</h1>
+<h1>Comments</h1>
 
 <div class="search-container">
-  <input type="text" id="searchBox" placeholder="Поиск..." />
+  <input type="text" id="searchBox" placeholder="Search comments..." />
   <button id="searchBtn">Найти</button>
 </div>
 <div id="errorMessage"></div>
 
 <ul id="commentsList"></ul>
-<button id="loadMoreBtn" style="display:none;">Показать ещё</button>
+
+<div id="paginationControls">
+  <button id="prevPageBtn" disabled>Previous</button>
+  <button id="nextPageBtn" disabled>Next</button>
+</div>
 
 <hr>
 
 <form id="newCommentForm">
-  <h2>Добавить комментарий</h2>
+  <h2>Add a new comment</h2>
   <input type="hidden" id="replyParentId" />
-  <textarea id="content" rows="4" placeholder="Ваш комментарий" required></textarea><br />
-  <button type="submit">Отправить</button>
-  <button type="button" id="cancelReplyBtn" style="display:none;">Отмена</button>
+  <textarea id="content" rows="4" placeholder="Write your comment here" required style="width: 100%;"></textarea>
+  <br />
+  <button type="submit">Submit Comment</button>
+  <button type="button" id="cancelReplyBtn" style="display:none;">Cancel Reply</button>
 </form>
 
 <script>
 const commentsList = document.getElementById('commentsList');
-const loadMoreBtn = document.getElementById('loadMoreBtn');
 const form = document.getElementById('newCommentForm');
 const contentField = document.getElementById('content');
 const replyParentIdField = document.getElementById('replyParentId');
@@ -146,141 +44,193 @@ const cancelReplyBtn = document.getElementById('cancelReplyBtn');
 const searchBox = document.getElementById('searchBox');
 const searchBtn = document.getElementById('searchBtn');
 const errorMessage = document.getElementById('errorMessage');
+const prevPageBtn = document.getElementById('prevPageBtn');
+const nextPageBtn = document.getElementById('nextPageBtn');
 
 let loadedComments = [];
-let currentPage = 1;
+let currentPage = 0;
 const pageSize = 5;
 let hasMore = true;
 let currentSearch = '';
-
-const apiBase = "/comments";
 
 function setError(text) {
   errorMessage.textContent = text || '';
 }
 
-async function fetchComments(page=1, search="", limit=5, offset=0) {
-  const params = new URLSearchParams();
-  params.append("limit", limit);
-  params.append("offset", offset);
-  if (search) params.append("search", search);
-
-  const url = `${apiBase}?${params.toString()}`;
+// Метод загрузки корневых комментариев с поиском и пагинацией
+async function fetchRootComments(page = 0, append = false, search = '') {
+  setError('');
+  const offset = page * pageSize;
+  let url = `/comments?limit=${pageSize}&offset=${offset}`;
+  if (search) {
+    url += `&search=${encodeURIComponent(search)}`;
+  }
   try {
     const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Ошибка получения комментариев: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error('Ошибка загрузки комментариев');
     const data = await response.json();
-    hasMore = data.length === pageSize;
-    return data;
+    if (!Array.isArray(data)) throw new Error('Получены некорректные данные');
+    if (append) loadedComments = [...loadedComments, ...data];
+    else {
+      loadedComments = data;
+      commentsList.innerHTML = '';
+    }
+    renderRootComments();
+    hasMore = data.length >= pageSize;
+    prevPageBtn.disabled = page === 0;
+    nextPageBtn.disabled = !hasMore;
+    currentPage = page;
   } catch (err) {
     setError(err.message);
-    return [];
   }
 }
 
-function renderComments(comments, container) {
-  container.innerHTML = "";
-  if (!comments.length) {
-    container.innerHTML = "<em>Нет комментариев</em>";
-    return;
-  }
-  comments.forEach(comment => {
-    const li = document.createElement('li');
-    li.className = 'comment';
-    li.dataset.commentId = comment.id;
-
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'content';
-    contentDiv.textContent = `#${comment.id} - ${comment.content}`;
-    li.appendChild(contentDiv);
-
-    const actions = document.createElement('span');
-    actions.className = 'actions';
-
-    const replyBtn = document.createElement('button');
-    replyBtn.textContent = 'Ответить';
-    replyBtn.onclick = () => {
-      replyParentIdField.value = comment.id;
-      contentField.focus();
-      cancelReplyBtn.style.display = 'inline';
-    };
-    actions.appendChild(replyBtn);
-
-    const delBtn = document.createElement('button');
-    delBtn.textContent = 'Удалить';
-    delBtn.onclick = async () => {
-      if (confirm(`Удалить комментарий #${comment.id}?`)) {
-        try {
-          const res = await fetch(`${apiBase}/${comment.id}`, { method: 'DELETE' });
-          if (!res.ok) throw new Error('Ошибка при удалении комментария');
-          loadComments();
-        } catch (err) {
-          setError(err.message);
-        }
-      }
-    };
-    actions.appendChild(delBtn);
-
-    li.appendChild(actions);
-
-    // Вложенные комментарии
-    if (comment.children && comment.children.length > 0) {
-      const childContainer = document.createElement('ul');
-      childContainer.className = 'children';
-      renderComments(comment.children, childContainer);
-      li.appendChild(childContainer);
-    }
-
-    commentsList.appendChild(li);
+// Рендер листа комментариев
+function renderRootComments() {
+  commentsList.innerHTML = '';
+  loadedComments.forEach(comment => {
+    commentsList.appendChild(createCommentNode(comment));
   });
 }
 
-async function loadComments() {
-  setError('');
-  const offset = (currentPage - 1) * pageSize;
-  const comments = await fetchComments(currentPage, currentSearch, pageSize, offset);
-  renderComments(comments, commentsList);
-  document.getElementById('pageInfo').innerText = `Страница ${currentPage}`;
-  loadMoreBtn.style.display = hasMore ? 'block' : 'none';
+// Создание DOM узла комментария
+function createCommentNode(comment) {
+  const li = document.createElement('li');
+  li.className = 'comment';
+  li.dataset.commentId = comment.id;
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'content';
+  contentDiv.textContent = `#${comment.id} - ${comment.content}`;
+  li.appendChild(contentDiv);
+
+  const actions = document.createElement('span');
+  actions.className = 'actions';
+
+  const replyBtn = document.createElement('button');
+  replyBtn.textContent = 'Reply';
+  replyBtn.onclick = () => {
+    replyParentIdField.value = String(comment.id);
+    contentField.focus();
+    cancelReplyBtn.style.display = 'inline';
+  };
+
+  const delBtn = document.createElement('button');
+  delBtn.textContent = 'Удалить';
+  delBtn.style.marginLeft = '10px';
+  delBtn.onclick = async () => {
+    if (!confirm(`Удалить комментарий №${comment.id}?`)) return;
+    try {
+      const res = await fetch(`/comments/${comment.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Ошибка при удалении комментария');
+      loadComments();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  actions.appendChild(replyBtn);
+  actions.appendChild(delBtn);
+  li.appendChild(actions);
+
+  const childrenContainer = document.createElement('ul');
+  childrenContainer.className = 'children';
+  li.appendChild(childrenContainer);
+
+  const loadRepliesBtn = document.createElement('button');
+  loadRepliesBtn.textContent = 'Показать ответы';
+  loadRepliesBtn.className = 'load-replies-btn';
+  loadRepliesBtn.onclick = () => {
+    loadRepliesBtn.disabled = true;
+    fetchChildComments(comment.id, childrenContainer, loadRepliesBtn);
+  };
+  li.appendChild(loadRepliesBtn);
+
+  return li;
 }
 
-form.onsubmit = async (e) => {
-  e.preventDefault();
+// Загрузка дочерних комментариев
+async function fetchChildComments(parent_id, container, button) {
   setError('');
-  const content = contentField.value.trim();
-  if (!content) {
-    setError('Комментарий не может быть пустым');
-    return;
-  }
-  const parent_id = replyParentIdField.value.trim() || null;
   try {
-    const res = await fetch(apiBase, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, parent_id }),
-    });
-    if (!res.ok) throw new Error('Ошибка при добавлении комментария');
-    contentField.value = '';
-    replyParentIdField.value = '';
-    cancelReplyBtn.style.display = 'none';
-    loadComments();
+    const response = await fetch(`/comments/${parent_id}/children`);
+    if (!response.ok) throw new Error('Ошибка загрузки ответов');
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error('Некорректные данные');
+
+    if (data.length === 0) {
+      container.innerHTML = '<li>Нет ответов</li>';
+      button.style.display = 'none';
+      return;
+    }
+
+    data.forEach(comment => container.appendChild(createCommentNode(comment)));
+    button.style.display = 'none';
   } catch (err) {
-    setError(err.message);
+    setError(`Ошибка загрузки ответов: ${err.message}`);
+    button.disabled = false;
   }
+}
+
+// Обработка пагинации
+prevPageBtn.onclick = () => {
+  if (currentPage > 0) fetchRootComments(currentPage - 1, false, currentSearch);
+};
+nextPageBtn.onclick = () => {
+  if (hasMore) fetchRootComments(currentPage + 1, false, currentSearch);
 };
 
+// Очистка parent_id и текста только при отмене ответа
 cancelReplyBtn.onclick = () => {
   replyParentIdField.value = '';
   contentField.value = '';
   cancelReplyBtn.style.display = 'none';
 };
 
+// Обработка отправки формы
+form.onsubmit = async e => {
+  e.preventDefault();
+  setError('');
+  const content = contentField.value.trim();
+  if (!content) {
+    setError('Content is required');
+    return;
+  }
+
+  let parentIdValue = replyParentIdField.value.trim();
+  let body = { content };
+
+  if (parentIdValue !== '' && !isNaN(Number(parentIdValue))) {
+    body.parent_id = Number(parentIdValue);
+  } else {
+    // Если parent_id пустой или не число, создаем как корневой
+    replyParentIdField.value = '';
+  }
+
+  try {
+    const res = await fetch('/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('Failed to create comment');
+    const data = await res.json();
+    alert('Comment created with ID: ' + data['Comment Created']);
+    contentField.value = '';
+    replyParentIdField.value = '';
+    cancelReplyBtn.style.display = 'none';
+    fetchRootComments(currentPage, false, currentSearch);
+  } catch (err) {
+    setError(err.message);
+  }
+};
+
+// Обработка поиска
 searchBtn.onclick = () => {
+  loadedComments = [];
+  currentPage = 0;
   currentSearch = searchBox.value.trim();
-  currentPage = 1;
-  loadComments();
+  fetchRootComments(0, false, currentSearch);
 };
 
 searchBox.addEventListener('keypress', e => {
@@ -290,22 +240,12 @@ searchBox.addEventListener('keypress', e => {
   }
 });
 
-document.getElementById('prevPageBtn').onclick = () => {
-  if (currentPage > 1) {
-    currentPage--;
-    loadComments();
-  }
-};
+// Изначальная загрузка
+fetchRootComments();
 
-document.getElementById('nextPageBtn').onclick = () => {
-  if (hasMore) {
-    currentPage++;
-    loadComments();
-  }
-};
-
-// Start
-loadComments();
+function loadComments() {
+  fetchRootComments(currentPage, false, currentSearch);
+}
 </script>
 
 </body>

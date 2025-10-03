@@ -10,11 +10,8 @@ import (
 )
 
 type Config struct {
-	Env        string `env:"ENV"`
-	Http       HttpConfig
-	Redis      RedisConfig
-	Postgres   DBConfig
-	Pagination PaginationConfig
+	Http     HttpConfig
+	Postgres DBConfig
 }
 
 type HttpConfig struct {
@@ -33,18 +30,6 @@ type PostgresConfig struct {
 	SSLMode  string `env:"POSTGRES_SSL_MODE"`
 }
 
-type RedisConfig struct {
-	Addr     string `env:"REDIS_ADDR"`
-	Password string `env:"REDIS_PASSWORD"`
-	DBRedis  int    `env:"REDIS_DBREDIS"`
-}
-
-type PaginationConfig struct {
-	Limit   int  `env:"PAGINATION_LIMIT"`
-	Offset  int  `env:"PAGINATION_OFFSET"`
-	SortAsk bool `env:"PAGINATION_SORT_ASK"`
-}
-
 type DBConfig struct {
 	Master PostgresConfig
 	Slaves []PostgresConfig
@@ -61,7 +46,6 @@ func LoadConfig() (*Config, error) {
 
 	cfg := Config{}
 
-	cfg.Env = os.Getenv("ENV")
 	cfg.Http.Port = os.Getenv("HTTP_PORT")
 
 	readTimeout := os.Getenv("HTTP_READ_TIMEOUT")
@@ -89,16 +73,46 @@ func LoadConfig() (*Config, error) {
 	cfg.Postgres.Master.Password = os.Getenv("POSTGRES_PASSWORD")
 	cfg.Postgres.Master.SSLMode = os.Getenv("POSTGRES_SSL_MODE")
 
-	cfg.Pagination.Limit, _ = strconv.Atoi(os.Getenv("PAGINATION_LIMIT"))
-	cfg.Pagination.Offset, _ = strconv.Atoi(os.Getenv("PAGINATION_OFFSET"))
-	cfg.Pagination.SortAsk, _ = strconv.ParseBool(os.Getenv("PAGINATION_SORT_ASK"))
-
-	cfg.Redis.Addr = os.Getenv("REDIS_ADDR")
-
-	cfg.Redis.Password = os.Getenv("REDIS_PASSWORD")
-	cfg.Redis.DBRedis, _ = strconv.Atoi(os.Getenv("REDIS_DBREDIS"))
-
 	log.Printf("Config loaded: %+v\n", cfg)
 
 	return &cfg, nil
 }
+
+/*
+
+package config
+
+import (
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+	"github.com/wb-go/wbf/config"
+)
+
+var Cfg = initConfig("config/config.yaml")
+
+func initConfig(path string) *Config {
+	wbfConfig := config.New()
+
+	err := wbfConfig.Load(path)
+	if err != nil {
+		log.Fatal("could not read config file: ", err)
+	}
+
+	var cfg Config
+	if err := wbfConfig.Unmarshal(&cfg); err != nil {
+		log.Fatal("could not parse config file: ", err)
+	}
+
+	err = godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("could not load .env file: ", err)
+	}
+
+	value, _ := os.LookupEnv("DB_PASSWORD")
+	cfg.Postgres.Password = value
+
+	return &cfg
+}
+*/

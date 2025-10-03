@@ -95,10 +95,11 @@ func InitRouter(ctx context.Context, log zerolog.Logger, h *comments.Handler, re
 	r.Use(ginext.Logger())
 	r.Use(ginext.Recovery())
 
-	// Маршруты
+	// Маршрутыф
 	r.GET("/home", ren.HomeHandler)
 	r.POST("/comments", h.CreateHandler)
-	r.GET("/comments", h.GetRootCommentsHandler)                      // корневые комментарии с пагинацией
+	r.GET("/comments", h.GetRootCommentsHandler)
+	r.GET("/comments/all", h.GetCommentTreeHandler)                   // корневые комментарии с пагинацией
 	r.GET("/comments/:parent_id/children", h.GetChildCommentsHandler) // дочерние по parentId
 	r.DELETE("/comments/:id", h.DeleteHandler)
 

@@ -13,6 +13,7 @@ type CommentService interface {
 	Delete(ctx context.Context, id int) error
 	GetRootComments(ctx context.Context, search *string, limit, offset int) ([]*domain.Comment, error)
 	GetChildComments(ctx context.Context, parentID int) ([]*domain.Comment, error)
+	GetAllComments(ctx context.Context) ([]domain.CommentNode, error)
 }
 
 type Service struct {
@@ -37,4 +38,8 @@ func (s *Service) GetRootComments(ctx context.Context, search *string, limit, of
 }
 func (s *Service) GetChildComments(ctx context.Context, parentID int) ([]*domain.Comment, error) {
 	return s.commentService.GetChildComments(ctx, parentID)
+}
+
+func (s *Service) GetAllComments(ctx context.Context) ([]domain.CommentNode, error) {
+	return s.commentService.GetAllComments(ctx)
 }

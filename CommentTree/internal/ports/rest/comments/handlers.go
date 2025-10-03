@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 	"github.com/wb-go/wbf/ginext"
 )
@@ -19,6 +20,7 @@ type CommentHandler interface {
 	Delete(ctx context.Context, id int) error
 	GetRootComments(ctx context.Context, search *string, limit, offset int) ([]*domain.Comment, error)
 	GetChildComments(ctx context.Context, parentID int) ([]*domain.Comment, error)
+	GetAllComments(ctx context.Context) ([]domain.CommentNode, error)
 }
 
 type Handler struct {
@@ -124,4 +126,13 @@ func (h *Handler) GetChildCommentsHandler(c *ginext.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, comments)
+}
+
+func (h *Handler) GetCommentTreeHandler(c *ginext.Context) {
+	tree, err := h.commentHandler.GetAllComments(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get comment tree: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, tree)
 }
